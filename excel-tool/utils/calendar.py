@@ -1,18 +1,19 @@
+from pathlib import Path
 import pandas as pd
-from datetime import timedelta
 
-def load_holidays(path="data/holiday.csv"):
-    df = pd.read_csv(path)
-    return pd.to_datetime(df["date"]).tolist()
+# ambil lokasi file ini
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# arahkan ke file data/holiday.csv
+DATA_PATH = BASE_DIR / "data" / "holiday.csv"
 
 
-def next_working_day(date, holidays):
-    if pd.isna(date):
-        return pd.NaT
-
-    date = date + timedelta(days=1)
-
-    while date.weekday() == 6 or date in holidays:
-        date = date + timedelta(days=1)
-
-    return date
+def load_holidays():
+    try:
+        df = pd.read_csv(DATA_PATH)
+        return df
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            f"File tidak ditemukan di path: {DATA_PATH}. "
+            "Pastikan file holiday.csv ada di folder data/"
+        )
