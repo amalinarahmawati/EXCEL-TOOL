@@ -3,9 +3,8 @@ import numpy as np
 import re
 from datetime import timedelta
 
-
 # =========================
-# HOLIDAY (optional reuse pattern)
+# HOLIDAY
 # =========================
 tanggal_merah = pd.to_datetime([
     "2026-01-01",
@@ -45,17 +44,13 @@ def next_working_day(tanggal):
 def proses_redo(df, df_master=None):
 
     df = df.copy()
-
-    # =========================
-    # CLEAN COLUMN
-    # =========================
     df.columns = df.columns.str.strip()
 
     # =========================
-    # CHECK MASTER
+    # MASTER CHECK
     # =========================
     if df_master is None:
-        raise ValueError("❌ Master file belum diupload. Silakan upload file master dulu.")
+        raise ValueError("❌ Master belum diupload")
 
     df_master = df_master.copy()
     df_master.columns = df_master.columns.str.strip()
@@ -63,10 +58,12 @@ def proses_redo(df, df_master=None):
     # =========================
     # CUT TOTAL
     # =========================
-    idx_total = df[df.astype(str).apply(
-        lambda row: row.str.contains("TOTAL", case=False, na=False).any(),
-        axis=1
-    )].index
+    idx_total = df[
+        df.astype(str).apply(
+            lambda row: row.str.contains("TOTAL", case=False, na=False).any(),
+            axis=1
+        )
+    ].index
 
     if len(idx_total) > 0:
         df = df.loc[:idx_total[0] - 1]
@@ -101,7 +98,7 @@ def proses_redo(df, df_master=None):
     df = df.drop(columns=[c for c in hapus_kolom if c in df.columns], errors="ignore")
 
     # =========================
-    # DATE LOGIC
+    # DATE CLEAN
     # =========================
     if "Jadwal Selesai" in df.columns:
         df["Jadwal Selesai"] = pd.to_datetime(df["Jadwal Selesai"], errors="coerce")
@@ -112,11 +109,12 @@ def proses_redo(df, df_master=None):
         mask = df["Jadwal/Janji Kirim"].isna()
         df.loc[mask, "Jadwal/Janji Kirim"] = df.loc[mask, "Jadwal Selesai"].apply(next_working_day)
 
+    # copy logic
     if "Jadwal/Janji Kirim" in df.columns:
         df["Jadwal Selesai"] = df["Jadwal/Janji Kirim"]
 
     # =========================
-    # REMOVE PRODUCTS (kalau ada kolom)
+    # PRODUCT FILTER
     # =========================
     if "Produk Gigi" in df.columns:
         produk_hapus = ["22 COR MODEL STONE", "22 COR TYPE III"]
@@ -128,7 +126,7 @@ def proses_redo(df, df_master=None):
                 .str.contains(pattern, na=False)]
 
     # =========================
-    # FIX NOMOR
+    # NOMOR FIX
     # =========================
     if "Nomor" in df.columns:
 
@@ -142,16 +140,16 @@ def proses_redo(df, df_master=None):
 
         df["Nomor"] = df["Nomor"].apply(fix_nomor)
 
-        mask_konfirmasi = df["Nomor"].astype(str).str.contains("Konfirmasi", case=False, na=False)
+        mask_konfirmasi = df["Nomor"].astype(str).str.contains(
+            "Konfirmasi", case=False, na=False
+        )
 
-        if "Jadwal/Janji Kirim" in df.columns:
-            df.loc[mask_konfirmasi, "Jadwal/Janji Kirim"] = np.nan
-
-        if "Jadwal Selesai" in df.columns:
-            df.loc[mask_konfirmasi, "Jadwal Selesai"] = np.nan
+        for col in ["Jadwal/Janji Kirim", "Jadwal Selesai"]:
+            if col in df.columns:
+                df.loc[mask_konfirmasi, col] = np.nan
 
     # =========================
-    # MASTER MERGE (IMPORTANT PART)
+    # MASTER MERGE (SAFE)
     # =========================
     if "ID Member" in df.columns and "Kode" in df_master.columns:
 
@@ -166,14 +164,22 @@ def proses_redo(df, df_master=None):
             suffixes=("", "_master")
         )
 
-        df["User ID"] = df["ID Member_master"]
+        df["User ID"] = df.get("ID Member_master")
 
         df = df.drop(columns=["Kode", "ID Member_master"], errors="ignore")
 
-    # fallback
+    # =========================
+    # FALLBACK USER ID
+    # =========================
     if "User ID" in df.columns and "ID Member" in df.columns:
-        df["User ID"] = df["User ID"].replace(["nan", "", "None", "-", " "], pd.NA)
-        df["ID Member"] = df["ID Member"].replace(["nan", "", "None", " "], pd.NA)
+
+        df["User ID"] = df["User ID"].replace(
+            ["nan", "", "None", "-", " "], pd.NA
+        )
+
+        df["ID Member"] = df["ID Member"].replace(
+            ["nan", "", "None", " "], pd.NA
+        )
 
         df["User ID"] = df["User ID"].fillna(df["ID Member"])
 
