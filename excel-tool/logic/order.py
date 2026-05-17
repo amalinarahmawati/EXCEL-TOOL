@@ -10,7 +10,7 @@ holidays = load_holidays()
 
 
 def proses_order(df):
-
+holidays = load_holidays()
     # =========================
     # CLEAN COLUMN NAME
     # =========================
