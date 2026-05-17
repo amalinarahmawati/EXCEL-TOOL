@@ -15,7 +15,7 @@ st.set_page_config(page_title="Olah data ke web", layout="wide")
 st.title("📊Processing System data")
 
 menu = st.sidebar.selectbox(
-    "📂 Pilih Modul",
+    "📂 Pilih Modul LAB",
     [
         "Faktur",
         "Mutasi",
