@@ -3,10 +3,7 @@ import numpy as np
 import re
 from utils.calendar import load_holidays, next_working_day
 
-# =========================
-# LOAD HOLIDAY SEKALI
-# =========================
-holidays = load_holidays()
+
 
 
 def proses_order(df):
