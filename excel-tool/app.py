@@ -11,7 +11,7 @@ from logic.cabut_pending import proses_cabut_pending
 from logic.order_dentcore import proses_order_dentcore
 from logic.redo_dentcore import proses_redo_dentcore
 
-# ===== KLINIK (BARU) =====
+# ===== KLINIK =====
 from logic.klinik import proses_jadwal_klinik, proses_point_klinik
 
 
@@ -20,7 +20,7 @@ st.set_page_config(page_title="Olah data ke web", layout="wide")
 st.title("📊 Processing System Data")
 
 # ======================
-# SIDEBAR (LAB & KLINIK)
+# SIDEBAR
 # ======================
 st.sidebar.title("📂 Menu Sistem")
 
@@ -28,6 +28,8 @@ kategori = st.sidebar.radio(
     "Pilih Kategori",
     ["LAB", "KLINIK"]
 )
+
+menu = None
 
 if kategori == "LAB":
     menu = st.sidebar.selectbox(
@@ -55,6 +57,19 @@ elif kategori == "KLINIK":
 
 uploaded_file = st.file_uploader("Upload Excel", type=["xlsx", "xls"])
 
+# ======================
+# MASTER FILE (UNTUK REDO SAJA)
+# ======================
+master_file = None
+
+if menu in ["Redo", "Redo Dentcore"]:
+    st.subheader("📌 Upload Master Data (WAJIB)")
+    master_file = st.file_uploader("Upload Master Excel", type=["xlsx", "xls"], key="master")
+
+    if master_file is None:
+        st.warning("⚠️ Kamu belum upload file master. User ID tidak bisa dibuat.")
+        st.stop()
+
 
 def to_excel(df):
     output = BytesIO()
@@ -70,6 +85,11 @@ def to_excel(df):
 if uploaded_file:
 
     df = pd.read_excel(uploaded_file)
+
+    # load master kalau ada
+    df_master = None
+    if master_file:
+        df_master = pd.read_excel(master_file)
 
     st.subheader(f"📌 Modul Aktif: {kategori} - {menu}")
     st.dataframe(df)
@@ -91,7 +111,7 @@ if uploaded_file:
                     df = proses_order(df)
 
                 elif menu == "Redo":
-                    df = proses_redo(df)
+                    df = proses_redo(df, df_master)  # <-- penting
 
                 elif menu == "Cabut Pending":
                     df = proses_cabut_pending(df)
@@ -100,7 +120,7 @@ if uploaded_file:
                     df = proses_order_dentcore(df)
 
                 elif menu == "Redo Dentcore":
-                    df = proses_redo_dentcore(df)
+                    df = proses_redo_dentcore(df, df_master)
 
             # ===== KLINIK =====
             elif kategori == "KLINIK":
