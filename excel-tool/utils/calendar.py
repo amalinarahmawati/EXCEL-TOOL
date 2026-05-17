@@ -1,45 +1,43 @@
-from pathlib import Path
 import pandas as pd
-from datetime import datetime, timedelta
-
-# lokasi file utils/
-BASE_DIR = Path(__file__).resolve().parent
-
-# root project
-ROOT_DIR = BASE_DIR.parent
-
-# path data holiday
-DATA_PATH = ROOT_DIR / "data" / "holiday.csv"
+from datetime import timedelta
 
 
-def load_holidays():
-    """
-    Load data holiday dari file CSV
-    """
-    try:
-        if not DATA_PATH.exists():
-            raise FileNotFoundError
+def load_holidays(path="data/holiday.csv"):
+    df = pd.read_csv(path)
 
-        df = pd.read_csv(DATA_PATH)
-        return df
+    # ubah jadi set of date (bukan datetime)
+    holidays = set(
+        pd.to_datetime(df["date"], errors="coerce")
+        .dt.date
+        .dropna()
+    )
 
-    except FileNotFoundError:
-        raise FileNotFoundError(
-            f"[ERROR] holiday.csv tidak ditemukan di: {DATA_PATH}"
-        )
+    return holidays
 
 
-def next_working_day(date):
-    """
-    Mengembalikan hari kerja berikutnya (skip Sabtu & Minggu)
-    """
-    if isinstance(date, str):
-        date = datetime.strptime(date, "%Y-%m-%d")
+def next_working_day(tanggal, holidays):
+    if pd.isna(tanggal):
+        return pd.NaT
 
-    next_day = date + timedelta(days=1)
+    # paksa jadi date
+    tanggal = pd.to_datetime(
+        tanggal,
+        errors="coerce"
+    )
 
-    # skip weekend
-    while next_day.weekday() >= 5:
-        next_day += timedelta(days=1)
+    if pd.isna(tanggal):
+        return pd.NaT
 
-    return next_day.date()
+    tanggal = tanggal.date()
+
+    # H+1 dulu
+    tanggal = tanggal + timedelta(days=1)
+
+    # skip Minggu + tanggal merah
+    while (
+        tanggal.weekday() == 6
+        or tanggal in holidays
+    ):
+        tanggal = tanggal + timedelta(days=1)
+
+    return pd.to_datetime(tanggal)
