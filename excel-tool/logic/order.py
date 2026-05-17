@@ -75,33 +75,32 @@ holidays = load_holidays()
     )
 
     # =========================
-    # JADWAL OTOMATIS
-    # =========================
+# JADWAL OTOMATIS
+# =========================
 
-    # convert dulu ke datetime
-    if "Jadwal Selesai" in df.columns:
-        df["Jadwal Selesai"] = pd.to_datetime(
-            df["Jadwal Selesai"],
-            errors="coerce"
-        )
+if "Jadwal Selesai" in df.columns:
+    df["Jadwal Selesai"] = pd.to_datetime(
+        df["Jadwal Selesai"],
+        errors="coerce"
+    )
 
-    if "Jadwal/Janji Kirim" in df.columns:
-        df["Jadwal/Janji Kirim"] = pd.to_datetime(
-            df["Jadwal/Janji Kirim"],
-            errors="coerce"
-        )
+if "Jadwal/Janji Kirim" in df.columns:
+    df["Jadwal/Janji Kirim"] = pd.to_datetime(
+        df["Jadwal/Janji Kirim"],
+        errors="coerce"
+    )
 
-        # isi yang kosong saja
-        mask = df["Jadwal/Janji Kirim"].isna()
+    mask = df["Jadwal/Janji Kirim"].isna()
 
-        if "Jadwal Selesai" in df.columns:
-            df.loc[mask, "Jadwal/Janji Kirim"] = df.loc[
-                mask,
-                "Jadwal Selesai"
-            ].apply(
-                lambda x: next_working_day(x, holidays)
-            )
-
+    df.loc[
+        mask,
+        "Jadwal/Janji Kirim"
+    ] = df.loc[
+        mask,
+        "Jadwal Selesai"
+    ].apply(
+        lambda x: next_working_day(x, holidays)
+    )
     # =========================
     # COPY JADWAL
     # =========================
