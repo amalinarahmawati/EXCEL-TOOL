@@ -1,13 +1,11 @@
 import pandas as pd
 import numpy as np
 import re
-from utils.calendar import load_holidays, next_working_day
-
-
+from datetime import timedelta
 
 
 def proses_order(df):
-holidays = load_holidays()
+
     # =========================
     # CLEAN COLUMN NAME
     # =========================
@@ -47,7 +45,7 @@ holidays = load_holidays()
     # HAPUS KOLOM TIDAK DIPAKAI
     # =========================
     hapus_kolom = [
-        "No Reservasi",
+        "No Reservasi",   # FIX missing comma (bug Colab kamu)
         "Pembuat",
         "Customer",
         "Kota",
@@ -74,38 +72,49 @@ holidays = load_holidays()
     # =========================
     # JADWAL OTOMATIS
     # =========================
+    tanggal_merah = pd.to_datetime([
+        "2026-01-01",
+        "2026-01-16",
+        "2026-02-17",
+        "2026-03-19",
+        "2026-03-21",
+        "2026-03-22",
+        "2026-04-03",
+        "2026-05-01",
+        "2026-05-14",
+        "2026-05-27",
+        "2026-05-31",
+        "2026-06-01",
+        "2026-06-16",
+        "2026-08-17",
+        "2026-08-25",
+        "2026-12-25"
+    ])
 
-    # convert dulu ke datetime
+    def next_working_day(tanggal):
+        if pd.isna(tanggal):
+            return pd.NaT
+
+        tanggal = tanggal + timedelta(days=1)
+
+        while tanggal.weekday() == 6 or tanggal in tanggal_merah:
+            tanggal = tanggal + timedelta(days=1)
+
+        return tanggal
+
     if "Jadwal Selesai" in df.columns:
-        df["Jadwal Selesai"] = pd.to_datetime(
-            df["Jadwal Selesai"],
-            errors="coerce"
-        )
+        df["Jadwal Selesai"] = pd.to_datetime(df["Jadwal Selesai"], errors="coerce")
 
     if "Jadwal/Janji Kirim" in df.columns:
-        df["Jadwal/Janji Kirim"] = pd.to_datetime(
-            df["Jadwal/Janji Kirim"],
-            errors="coerce"
-        )
+        df["Jadwal/Janji Kirim"] = pd.to_datetime(df["Jadwal/Janji Kirim"], errors="coerce")
 
-        # isi yang kosong saja
         mask = df["Jadwal/Janji Kirim"].isna()
-
-        if "Jadwal Selesai" in df.columns:
-            df.loc[mask, "Jadwal/Janji Kirim"] = df.loc[
-                mask,
-                "Jadwal Selesai"
-            ].apply(
-                lambda x: next_working_day(x, holidays)
-            )
+        df.loc[mask, "Jadwal/Janji Kirim"] = df.loc[mask, "Jadwal Selesai"].apply(next_working_day)
 
     # =========================
     # COPY JADWAL
     # =========================
-    if (
-        "Jadwal/Janji Kirim" in df.columns
-        and "Jadwal Selesai" in df.columns
-    ):
+    if "Jadwal/Janji Kirim" in df.columns and "Jadwal Selesai" in df.columns:
         df["Jadwal Selesai"] = df["Jadwal/Janji Kirim"]
 
     # =========================
@@ -138,12 +147,10 @@ holidays = load_holidays()
     pattern = "|".join(produk_hapus)
 
     if "Produk Gigi / Tambahan" in df.columns:
-        df = df[
-            ~df["Produk Gigi / Tambahan"]
-            .astype(str)
-            .str.upper()
-            .str.contains(pattern, na=False)
-        ]
+        df = df[~df["Produk Gigi / Tambahan"]
+                .astype(str)
+                .str.upper()
+                .str.contains(pattern, na=False)]
 
     # =========================
     # FIX NOMOR
@@ -155,13 +162,8 @@ holidays = load_holidays()
                 return x
 
             x = str(x)
-
-            # K -> Konfirmasi
-            x = re.sub(r"\bK\b", "Konfirmasi", x)
-
-            # rapikan spasi
-            x = re.sub(r"\s+", " ", x).strip()
-
+            x = re.sub(r'\bK\b', 'Konfirmasi', x)
+            x = re.sub(r'\s+', ' ', x).strip()
             return x
 
         df["Nomor"] = df["Nomor"].apply(fix_nomor)
@@ -178,44 +180,29 @@ holidays = load_holidays()
         )
 
         if "Jadwal/Janji Kirim" in df.columns:
-            df.loc[
-                mask_konfirmasi,
-                "Jadwal/Janji Kirim"
-            ] = "-"
+            df.loc[mask_konfirmasi, "Jadwal/Janji Kirim"] = "-"
 
         if "Jadwal Selesai" in df.columns:
-            df.loc[
-                mask_konfirmasi,
-                "Jadwal Selesai"
-            ] = "-"
+            df.loc[mask_konfirmasi, "Jadwal Selesai"] = "-"
 
     # =========================
     # USER ID CLEAN
     # =========================
     if "User ID" in df.columns:
         df["User ID"] = df["User ID"].replace(
-            ["nan", "", "None", "-", " "],
-            pd.NA
+            ["nan", "", "None", "-", " "], pd.NA
         )
 
     if "ID Member" in df.columns:
         df["ID Member"] = df["ID Member"].replace(
-            ["nan", "", "None", " "],
-            pd.NA
+            ["nan", "", "None", " "], pd.NA
         )
-
-        if "User ID" in df.columns:
-            df["User ID"] = df["User ID"].fillna(
-                df["ID Member"]
-            )
+        df["User ID"] = df["User ID"].fillna(df["ID Member"])
 
     # =========================
     # DUPLICATE LOGIC FIX
     # =========================
-    if (
-        "User ID" in df.columns
-        and "ID Member" in df.columns
-    ):
+    if "User ID" in df.columns and "ID Member" in df.columns:
 
         result = []
 
@@ -224,30 +211,20 @@ holidays = load_holidays()
             user_id = row.get("User ID")
             id_member = str(row.get("ID Member", ""))
 
-            is_special_id = (
-                id_member.count("-") == 2
-                and id_member != "nan"
-            )
+            is_special_id = id_member.count("-") == 2 and id_member != "nan"
 
-            # simpan row utama
-            result.append(row.copy())
+            if pd.isna(user_id):
+                result.append(row.copy())
+            else:
+                result.append(row.copy())
 
-            # duplicate hanya jika special ID
-            if (
-                pd.notna(user_id)
-                and is_special_id
-                and user_id != id_member
-            ):
-                new_row = row.copy()
-                new_row["User ID"] = id_member
-                result.append(new_row)
+                if is_special_id and user_id != id_member:
+                    new_row = row.copy()
+                    new_row["User ID"] = id_member
+                    result.append(new_row)
 
         df = pd.DataFrame(result)
 
-        # hapus ID Member
-        df = df.drop(
-            columns=["ID Member"],
-            errors="ignore"
-        )
+        df = df.drop(columns=["ID Member"], errors="ignore")
 
     return df
