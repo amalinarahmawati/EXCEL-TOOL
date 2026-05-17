@@ -45,7 +45,7 @@ def proses_order(df):
     # HAPUS KOLOM TIDAK DIPAKAI
     # =========================
     hapus_kolom = [
-        "No Reservasi",   # FIX missing comma (bug Colab kamu)
+        "No Reservasi",
         "Pembuat",
         "Customer",
         "Kota",
@@ -95,26 +95,50 @@ def proses_order(df):
         if pd.isna(tanggal):
             return pd.NaT
 
+        tanggal = pd.to_datetime(tanggal, errors="coerce")
+
+        if pd.isna(tanggal):
+            return pd.NaT
+
         tanggal = tanggal + timedelta(days=1)
 
-        while tanggal.weekday() == 6 or tanggal in tanggal_merah:
+        while (
+            tanggal.weekday() == 6
+            or tanggal.normalize() in tanggal_merah
+        ):
             tanggal = tanggal + timedelta(days=1)
 
         return tanggal
 
     if "Jadwal Selesai" in df.columns:
-        df["Jadwal Selesai"] = pd.to_datetime(df["Jadwal Selesai"], errors="coerce")
+        df["Jadwal Selesai"] = pd.to_datetime(
+            df["Jadwal Selesai"],
+            errors="coerce"
+        )
 
     if "Jadwal/Janji Kirim" in df.columns:
-        df["Jadwal/Janji Kirim"] = pd.to_datetime(df["Jadwal/Janji Kirim"], errors="coerce")
+        df["Jadwal/Janji Kirim"] = pd.to_datetime(
+            df["Jadwal/Janji Kirim"],
+            errors="coerce"
+        )
 
         mask = df["Jadwal/Janji Kirim"].isna()
-        df.loc[mask, "Jadwal/Janji Kirim"] = df.loc[mask, "Jadwal Selesai"].apply(next_working_day)
+
+        df.loc[
+            mask,
+            "Jadwal/Janji Kirim"
+        ] = df.loc[
+            mask,
+            "Jadwal Selesai"
+        ].apply(next_working_day)
 
     # =========================
     # COPY JADWAL
     # =========================
-    if "Jadwal/Janji Kirim" in df.columns and "Jadwal Selesai" in df.columns:
+    if (
+        "Jadwal/Janji Kirim" in df.columns
+        and "Jadwal Selesai" in df.columns
+    ):
         df["Jadwal Selesai"] = df["Jadwal/Janji Kirim"]
 
     # =========================
@@ -147,10 +171,12 @@ def proses_order(df):
     pattern = "|".join(produk_hapus)
 
     if "Produk Gigi / Tambahan" in df.columns:
-        df = df[~df["Produk Gigi / Tambahan"]
-                .astype(str)
-                .str.upper()
-                .str.contains(pattern, na=False)]
+        df = df[
+            ~df["Produk Gigi / Tambahan"]
+            .astype(str)
+            .str.upper()
+            .str.contains(pattern, na=False)
+        ]
 
     # =========================
     # FIX NOMOR
@@ -162,14 +188,15 @@ def proses_order(df):
                 return x
 
             x = str(x)
-            x = re.sub(r'\bK\b', 'Konfirmasi', x)
-            x = re.sub(r'\s+', ' ', x).strip()
+            x = re.sub(r"\bK\b", "Konfirmasi", x)
+            x = re.sub(r"\s+", " ", x).strip()
+
             return x
 
         df["Nomor"] = df["Nomor"].apply(fix_nomor)
 
     # =========================
-    # KONFIRMASI = JADWAL "-"
+    # KONFIRMASI = JADWAL KOSONG
     # =========================
     if "Nomor" in df.columns:
 
@@ -180,29 +207,44 @@ def proses_order(df):
         )
 
         if "Jadwal/Janji Kirim" in df.columns:
-            df.loc[mask_konfirmasi, "Jadwal/Janji Kirim"] = "-"
+            df.loc[
+                mask_konfirmasi,
+                "Jadwal/Janji Kirim"
+            ] = pd.NaT
 
         if "Jadwal Selesai" in df.columns:
-            df.loc[mask_konfirmasi, "Jadwal Selesai"] = "-"
+            df.loc[
+                mask_konfirmasi,
+                "Jadwal Selesai"
+            ] = pd.NaT
 
     # =========================
     # USER ID CLEAN
     # =========================
     if "User ID" in df.columns:
         df["User ID"] = df["User ID"].replace(
-            ["nan", "", "None", "-", " "], pd.NA
+            ["nan", "", "None", "-", " "],
+            pd.NA
         )
 
     if "ID Member" in df.columns:
         df["ID Member"] = df["ID Member"].replace(
-            ["nan", "", "None", " "], pd.NA
+            ["nan", "", "None", " "],
+            pd.NA
         )
-        df["User ID"] = df["User ID"].fillna(df["ID Member"])
+
+        if "User ID" in df.columns:
+            df["User ID"] = df["User ID"].fillna(
+                df["ID Member"]
+            )
 
     # =========================
     # DUPLICATE LOGIC FIX
     # =========================
-    if "User ID" in df.columns and "ID Member" in df.columns:
+    if (
+        "User ID" in df.columns
+        and "ID Member" in df.columns
+    ):
 
         result = []
 
@@ -211,20 +253,44 @@ def proses_order(df):
             user_id = row.get("User ID")
             id_member = str(row.get("ID Member", ""))
 
-            is_special_id = id_member.count("-") == 2 and id_member != "nan"
+            is_special_id = (
+                id_member.count("-") == 2
+                and id_member != "nan"
+            )
 
-            if pd.isna(user_id):
-                result.append(row.copy())
-            else:
-                result.append(row.copy())
+            # simpan row utama
+            result.append(row.copy())
 
-                if is_special_id and user_id != id_member:
-                    new_row = row.copy()
-                    new_row["User ID"] = id_member
-                    result.append(new_row)
+            # duplicate hanya jika perlu
+            if (
+                pd.notna(user_id)
+                and is_special_id
+                and user_id != id_member
+            ):
+                new_row = row.copy()
+                new_row["User ID"] = id_member
+                result.append(new_row)
 
         df = pd.DataFrame(result)
 
-        df = df.drop(columns=["ID Member"], errors="ignore")
+        # hapus ID Member
+        df = df.drop(
+            columns=["ID Member"],
+            errors="ignore"
+        )
+
+    # =========================
+    # OPTIONAL: TAMPILKAN "-"
+    # DI OUTPUT EXCEL
+    # =========================
+    if "Jadwal/Janji Kirim" in df.columns:
+        df["Jadwal/Janji Kirim"] = df[
+            "Jadwal/Janji Kirim"
+        ].fillna("-")
+
+    if "Jadwal Selesai" in df.columns:
+        df["Jadwal Selesai"] = df[
+            "Jadwal Selesai"
+        ].fillna("-")
 
     return df
