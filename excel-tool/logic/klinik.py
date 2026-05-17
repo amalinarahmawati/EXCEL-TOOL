@@ -3,8 +3,18 @@ import pandas as pd
 def proses_jadwal_klinik(df):
     df.columns = df.columns.str.strip()
 
-    if "tanggal" in df.columns:
-        df["tanggal"] = pd.to_datetime(df["tanggal"], errors="coerce")
+    # =========================
+    # 1. HAPUS KOLOM ALAMAT
+    # =========================
+    if "Alamat" in df.columns:
+        df = df.drop(columns=["Alamat"])
+
+    # =========================
+    # 2. HAPUS DATA TANPA NO KARTU
+    # =========================
+    if "No Kartu" in df.columns:
+        df = df[df["No Kartu"].notna()]
+        df = df[df["No Kartu"].astype(str).str.strip() != ""]
 
     return df
 
@@ -12,7 +22,17 @@ def proses_jadwal_klinik(df):
 def proses_point_klinik(df):
     df.columns = df.columns.str.strip()
 
-    if "tindakan" in df.columns:
-        df["point"] = df["tindakan"].apply(lambda x: 10 if pd.notna(x) else 0)
+    # =========================
+    # 1. HAPUS KOLOM KODE PASIEN
+    # =========================
+    if "Kode Pasien" in df.columns:
+        df = df.drop(columns=["Kode Pasien"])
+
+    # =========================
+    # 2. HAPUS DATA TANPA NO KARTU
+    # =========================
+    if "No Kartu" in df.columns:
+        df = df[df["No Kartu"].notna()]
+        df = df[df["No Kartu"].astype(str).str.strip() != ""]
 
     return df
