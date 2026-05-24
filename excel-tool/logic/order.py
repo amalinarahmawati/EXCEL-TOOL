@@ -219,24 +219,50 @@ def proses_order(df):
             ] = pd.NaT
 
     # =========================
-    # USER ID CLEAN
+    # USER ID CLEAN (FIX TOTAL)
     # =========================
     if "User ID" in df.columns:
-        df["User ID"] = df["User ID"].replace(
-            ["nan", "", "None", "-", " "],
-            pd.NA
-        )
+
+    df["User ID"] = (
+        df["User ID"]
+        .astype(str)
+        .str.strip()
+        .replace({
+            "nan": pd.NA,
+            "None": pd.NA,
+            "none": pd.NA,
+            "": pd.NA,
+            "-": pd.NA,
+            "–": pd.NA,
+            "—": pd.NA,
+            " - ": pd.NA
+        })
+    )
 
     if "ID Member" in df.columns:
-        df["ID Member"] = df["ID Member"].replace(
-            ["nan", "", "None", " "],
-            pd.NA
-        )
 
-        if "User ID" in df.columns:
-            df["User ID"] = df["User ID"].fillna(
-                df["ID Member"]
-            )
+    df["ID Member"] = (
+        df["ID Member"]
+        .astype(str)
+        .str.strip()
+        .replace({
+            "nan": pd.NA,
+            "None": pd.NA,
+            "none": pd.NA,
+            "": pd.NA,
+            "-": pd.NA,
+            "–": pd.NA,
+            "—": pd.NA,
+            " - ": pd.NA
+        })
+    )
+
+# isi User ID dari ID Member
+if "User ID" in df.columns and "ID Member" in df.columns:
+    df["User ID"] = df["User ID"].fillna(df["ID Member"])
+
+# FINAL SAFETY CHECK (INI YANG KAMU KURANG)
+df["User ID"] = df["User ID"].replace(["-", "–", "—"], pd.NA)
 
     # =========================
     # DUPLICATE LOGIC FIX
