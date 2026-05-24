@@ -3,7 +3,22 @@ import numpy as np
 import re
 from datetime import timedelta
 
+# =========================
+# HOLIDAY LIST (GLOBAL)
+# =========================
+tanggal_merah = pd.to_datetime([
+    "2026-01-01", "2026-01-16", "2026-02-17",
+    "2026-03-19", "2026-03-21", "2026-03-22",
+    "2026-04-03", "2026-05-01", "2026-05-14",
+    "2026-05-27", "2026-05-31", "2026-06-01",
+    "2026-06-16", "2026-08-17", "2026-08-25",
+    "2026-12-25"
+])
 
+
+# =========================
+# NEXT WORKING DAY
+# =========================
 def next_working_day(tanggal):
     if pd.isna(tanggal):
         return pd.NaT
@@ -21,23 +36,54 @@ def next_working_day(tanggal):
 
 
 # =========================
+# CLEAN USER ID (ANTI "-")
+# =========================
+def clean_userid(series):
+    return (
+        series.astype(str)
+        .str.strip()
+        .replace({
+            "nan": pd.NA,
+            "None": pd.NA,
+            "none": pd.NA,
+            "": pd.NA,
+            "-": pd.NA,
+            "–": pd.NA,
+            "—": pd.NA
+        })
+    )
+
+
+# =========================
+# FIX NOMOR SAFE (ANTI ERROR TYPE)
+# =========================
+def fix_nomor(x):
+    if pd.isna(x):
+        return x
+    x = str(x)
+    x = re.sub(r"\s+", " ", x)
+    x = re.sub(r"\bK\b", "Konfirmasi", x)
+    return x.strip()
+
+
+# =========================
 # MAIN FUNCTION
 # =========================
 def proses_redo(df, df_master):
 
+    # =========================
+    # SAFETY CHECK
+    # =========================
     if df is None:
         return df
 
-    df = df.copy()
-    df.columns = df.columns.str.strip()
-
-    # =========================
-    # MASTER CHECK
-    # =========================
     if df_master is None or df_master.empty:
-        raise ValueError("Master belum diupload")
+        raise ValueError("❌ Master belum diupload")
 
+    df = df.copy()
     df_master = df_master.copy()
+
+    df.columns = df.columns.str.strip()
     df_master.columns = df_master.columns.str.strip()
 
     # =========================
@@ -52,13 +98,14 @@ def proses_redo(df, df_master):
         df = df.loc[:idx_total[0] - 1]
 
     # =========================
-    # FILL TANGGAL
+    # FILL TANGGAL (ANTI 1970 FIX)
     # =========================
     if "Tanggal" in df.columns:
+        df["Tanggal"] = pd.to_datetime(df["Tanggal"], errors="coerce")
         df["Tanggal"] = df["Tanggal"].ffill()
 
     # =========================
-    # DROP UNUSED COLUMNS
+    # DROP KOLOM
     # =========================
     hapus_kolom = [
         "No Reservasi", "Pembuat", "Customer", "Kota",
@@ -71,80 +118,22 @@ def proses_redo(df, df_master):
 
     df = df.drop(columns=[c for c in hapus_kolom if c in df.columns], errors="ignore")
 
-     # =========================
+    # =========================
     # JADWAL OTOMATIS
     # =========================
-    tanggal_merah = pd.to_datetime([
-        "2026-01-01",
-        "2026-01-16",
-        "2026-02-17",
-        "2026-03-19",
-        "2026-03-21",
-        "2026-03-22",
-        "2026-04-03",
-        "2026-05-01",
-        "2026-05-14",
-        "2026-05-27",
-        "2026-05-31",
-        "2026-06-01",
-        "2026-06-16",
-        "2026-08-17",
-        "2026-08-25",
-        "2026-12-25"
-    ])
-
-    def next_working_day(tanggal):
-        if pd.isna(tanggal):
-            return pd.NaT
-
-        tanggal = pd.to_datetime(tanggal, errors="coerce")
-
-        if pd.isna(tanggal):
-            return pd.NaT
-
-        tanggal = tanggal + timedelta(days=1)
-
-        while (
-            tanggal.weekday() == 6
-            or tanggal.normalize() in tanggal_merah
-        ):
-            tanggal = tanggal + timedelta(days=1)
-
-        return tanggal
-
     if "Jadwal Selesai" in df.columns:
-        df["Jadwal Selesai"] = pd.to_datetime(
-            df["Jadwal Selesai"],
-            errors="coerce"
-        )
+        df["Jadwal Selesai"] = pd.to_datetime(df["Jadwal Selesai"], errors="coerce")
 
     if "Jadwal/Janji Kirim" in df.columns:
-        df["Jadwal/Janji Kirim"] = pd.to_datetime(
-            df["Jadwal/Janji Kirim"],
-            errors="coerce"
-        )
+        df["Jadwal/Janji Kirim"] = pd.to_datetime(df["Jadwal/Janji Kirim"], errors="coerce")
 
         mask = df["Jadwal/Janji Kirim"].isna()
+        df.loc[mask, "Jadwal/Janji Kirim"] = df.loc[mask, "Jadwal Selesai"].apply(next_working_day)
 
-        df.loc[
-            mask,
-            "Jadwal/Janji Kirim"
-        ] = df.loc[
-            mask,
-            "Jadwal Selesai"
-        ].apply(next_working_day)
-
-    # =========================
-    # COPY JADWAL
-    # =========================
-    if (
-        "Jadwal/Janji Kirim" in df.columns
-        and "Jadwal Selesai" in df.columns
-    ):
         df["Jadwal Selesai"] = df["Jadwal/Janji Kirim"]
 
     # =========================
-    # REMOVE PRODUCT
+    # REMOVE PRODUK
     # =========================
     if "Produk Gigi" in df.columns:
         produk_hapus = ["22 COR MODEL STONE", "22 COR TYPE III"]
@@ -153,22 +142,13 @@ def proses_redo(df, df_master):
         df = df[~df["Produk Gigi"].astype(str).str.upper().str.contains(pattern, na=False)]
 
     # =========================
-    # FIX NOMOR (FIXED INDENT ERROR)
+    # FIX NOMOR
     # =========================
     if "Nomor" in df.columns:
-
-        def fix_nomor(x):
-            if pd.isna(x):
-                return x
-            x = str(x)
-            x = re.sub(r"\s+", " ", x)
-            x = re.sub(r"\bK\b", "Konfirmasi", x)
-            return x.strip()
-
         df["Nomor"] = df["Nomor"].apply(fix_nomor)
 
     # =========================
-    # MASTER MERGE SAFE
+    # MASTER MERGE
     # =========================
     if "ID Member" in df.columns and "Kode" in df_master.columns:
 
@@ -186,22 +166,13 @@ def proses_redo(df, df_master):
         df = df.drop(columns=["Kode", "ID Member_y"], errors="ignore")
 
     # =========================
-    # USER ID CLEAN (ANTI "-")
+    # CLEAN USER ID (INI FIX UTAMA "-")
     # =========================
     if "User ID" in df.columns:
+        df["User ID"] = clean_userid(df["User ID"])
+        df["User ID"] = df["User ID"].fillna(df.get("ID Member"))
 
-        df["User ID"] = (
-            df["User ID"]
-            .astype(str)
-            .str.strip()
-            .replace(["nan", "None", "", "-", "–", "—"], pd.NA)
-        )
-
-    if "ID Member" in df.columns:
-        df["ID Member"] = df["ID Member"].astype(str).str.strip()
-        df["User ID"] = df["User ID"].fillna(df["ID Member"])
-
-    df["User ID"] = df["User ID"].replace(["-", "–", "—"], pd.NA)
+        df["User ID"] = df["User ID"].replace(["-", "–", "—"], pd.NA)
 
     # =========================
     # DUPLICATE LOGIC
@@ -209,7 +180,6 @@ def proses_redo(df, df_master):
     result = []
 
     for _, row in df.iterrows():
-
         user_id = row.get("User ID")
         id_member = str(row.get("ID Member", ""))
 
@@ -227,7 +197,7 @@ def proses_redo(df, df_master):
     df = df.drop(columns=["ID Member"], errors="ignore")
 
     # =========================
-    # POSITIONING PASIEN
+    # POSITION PASIEN
     # =========================
     if "Pasien" in df.columns and "User ID" in df.columns:
         cols = list(df.columns)
