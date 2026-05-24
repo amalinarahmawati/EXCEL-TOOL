@@ -114,7 +114,7 @@ if uploaded_file:
                     df = proses_redo(df, df_master)  # <-- penting
 
                 elif menu == "Cabut Pending":
-                    df = proses_cabut_pending(df)
+                    df = proses_cabut_pending(df, df_master)
 
                 elif menu == "Order Dentcore":
                     df = proses_order_dentcore(df)
