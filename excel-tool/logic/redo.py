@@ -4,7 +4,7 @@ import re
 from datetime import timedelta
 
 # =========================
-# HOLIDAY LIST (GLOBAL)
+# HOLIDAY LIST
 # =========================
 tanggal_merah = pd.to_datetime([
     "2026-01-01", "2026-01-16", "2026-02-17",
@@ -15,14 +15,10 @@ tanggal_merah = pd.to_datetime([
     "2026-12-25"
 ])
 
-
 # =========================
 # NEXT WORKING DAY
 # =========================
 def next_working_day(tanggal):
-    if pd.isna(tanggal):
-        return pd.NaT
-
     tanggal = pd.to_datetime(tanggal, errors="coerce")
     if pd.isna(tanggal):
         return pd.NaT
@@ -36,11 +32,11 @@ def next_working_day(tanggal):
 
 
 # =========================
-# CLEAN USER ID (ANTI "-")
+# CLEAN USER ID
 # =========================
-def clean_userid(series):
+def clean_userid(s):
     return (
-        series.astype(str)
+        s.astype(str)
         .str.strip()
         .replace({
             "nan": pd.NA,
@@ -55,7 +51,7 @@ def clean_userid(series):
 
 
 # =========================
-# FIX NOMOR SAFE (ANTI ERROR TYPE)
+# FIX NOMOR
 # =========================
 def fix_nomor(x):
     if pd.isna(x):
@@ -72,13 +68,13 @@ def fix_nomor(x):
 def proses_redo(df, df_master):
 
     # =========================
-    # SAFETY CHECK
+    # SAFETY
     # =========================
     if df is None:
         return df
 
     if df_master is None or df_master.empty:
-        raise ValueError("❌ Master belum diupload")
+        raise ValueError("Master belum diupload")
 
     df = df.copy()
     df_master = df_master.copy()
@@ -98,7 +94,7 @@ def proses_redo(df, df_master):
         df = df.loc[:idx_total[0] - 1]
 
     # =========================
-    # FILL TANGGAL (ANTI 1970 FIX)
+    # TANGGAL FIX (ANTI 1970)
     # =========================
     if "Tanggal" in df.columns:
         df["Tanggal"] = pd.to_datetime(df["Tanggal"], errors="coerce")
@@ -148,7 +144,7 @@ def proses_redo(df, df_master):
         df["Nomor"] = df["Nomor"].apply(fix_nomor)
 
     # =========================
-    # MASTER MERGE
+    # MASTER MERGE (SAFE)
     # =========================
     if "ID Member" in df.columns and "Kode" in df_master.columns:
 
@@ -166,13 +162,17 @@ def proses_redo(df, df_master):
         df = df.drop(columns=["Kode", "ID Member_y"], errors="ignore")
 
     # =========================
-    # CLEAN USER ID (INI FIX UTAMA "-")
+    # USER ID CLEAN (FIX TOTAL ISSUE)
     # =========================
-    if "User ID" in df.columns:
-        df["User ID"] = clean_userid(df["User ID"])
-        df["User ID"] = df["User ID"].fillna(df.get("ID Member"))
+    if "User ID" not in df.columns:
+        df["User ID"] = pd.NA
 
-        df["User ID"] = df["User ID"].replace(["-", "–", "—"], pd.NA)
+    df["User ID"] = clean_userid(df["User ID"])
+
+    if "ID Member" in df.columns:
+        df["User ID"] = df["User ID"].fillna(df["ID Member"])
+
+    df["User ID"] = df["User ID"].replace(["-", "–", "—"], pd.NA)
 
     # =========================
     # DUPLICATE LOGIC
