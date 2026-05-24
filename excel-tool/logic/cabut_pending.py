@@ -14,17 +14,16 @@ tanggal_merah = pd.to_datetime([
     "2026-12-25"
 ]).normalize()
 
+
 # =========================
-# SAFE DATE CONVERTER (ANTI 1970 TOTAL FIX)
+# SAFE DATE (ANTI 1970)
 # =========================
 def safe_date(series):
     s = pd.to_numeric(series, errors="coerce")
 
-    # kalau mayoritas numeric → Excel serial
-    if s.notna().sum() > len(series) * 0.3:
+    if s.notna().sum() > len(series) * 0.5:
         return pd.to_datetime(s, unit="D", origin="1899-12-30", errors="coerce")
 
-    # kalau string/datetime campur
     return pd.to_datetime(series, errors="coerce")
 
 
@@ -44,7 +43,7 @@ def next_working_day(t):
 
 
 # =========================
-# MAIN PROCESS
+# MAIN FUNCTION (FIXED)
 # =========================
 def proses_cabut_pending(df, df_master=None):
 
@@ -65,16 +64,15 @@ def proses_cabut_pending(df, df_master=None):
         df = df.loc[:idx_total[0] - 1].copy()
 
     # =========================
-    # TANGGAL (ANTI 1970 FIX)
+    # TANGGAL
     # =========================
     if "Tanggal" in df.columns:
         df["Tanggal"] = safe_date(df["Tanggal"]).ffill()
 
     # =========================
-    # DROP KOLOM
+    # DROP KOLOM (User ID dihapus dulu)
     # =========================
-    drop_cols = ["Waktu Cabut", "Customer", "User ID"]
-    df = df.drop(columns=drop_cols, errors="ignore")
+    df = df.drop(columns=["Waktu Cabut", "Customer", "User ID"], errors="ignore")
 
     # =========================
     # JADWAL FIX
@@ -87,12 +85,15 @@ def proses_cabut_pending(df, df_master=None):
 
         mask = df["Janji Kirim"].isna()
 
-        df.loc[mask, "Janji Kirim"] = df.loc[mask, "Jadwal Selesai"].apply(next_working_day)
+        df.loc[mask, "Janji Kirim"] = df.loc[
+            mask,
+            "Jadwal Selesai"
+        ].apply(next_working_day)
 
         df["Jadwal Selesai"] = df["Janji Kirim"]
 
     # =========================
-    # CLEAN NOMOR
+    # NOMOR CLEAN
     # =========================
     if "Nomor" in df.columns:
         df["Nomor"] = (
@@ -107,11 +108,12 @@ def proses_cabut_pending(df, df_master=None):
 
         df.loc[mask_konfirmasi, ["Jadwal Selesai", "Janji Kirim"]] = pd.NaT
 
-     # =========================
-    # USER ID SAFE
     # =========================
-    if df_master is not None and "ID Member" in df.columns:
+    # USER ID REBUILD (MASTER PRIORITY)
+    # =========================
+    if df_master is not None:
 
+        df_master = df_master.copy()
         df_master.columns = df_master.columns.str.strip()
 
         if "Kode" in df_master.columns and "ID Member" in df_master.columns:
@@ -121,16 +123,32 @@ def proses_cabut_pending(df, df_master=None):
                 df_master["ID Member"].astype(str).str.strip()
             ))
 
-            df["User ID"] = df["ID Member"].astype(str).str.strip().map(mapping)
+            if "ID Member" in df.columns:
+                df["User ID"] = df["ID Member"].astype(str).str.strip().map(mapping)
+            else:
+                df["User ID"] = pd.NA
 
+    # fallback kalau master tidak ada
     if "User ID" not in df.columns:
-        df["User ID"] = pd.NA
+        if "ID Member" in df.columns:
+            df["User ID"] = df["ID Member"]
+        else:
+            df["User ID"] = pd.NA
 
+    # cleanup
+    df["User ID"] = (
+        df["User ID"]
+        .astype(str)
+        .replace({"nan": pd.NA, "None": pd.NA, "-": pd.NA, "": pd.NA})
+        .str.strip()
+    )
+
+    # fill fallback
     if "ID Member" in df.columns:
         df["User ID"] = df["User ID"].fillna(df["ID Member"])
 
     # =========================
-    # POSISI KOLOM
+    # POSISI KOLOM (SAMA REDO STYLE)
     # =========================
     cols = list(df.columns)
 
@@ -139,7 +157,8 @@ def proses_cabut_pending(df, df_master=None):
         cols.insert(cols.index("User ID"), "Pasien")
         df = df[cols]
 
-    if "Dokter" in cols:
+    if "Dokter" in df.columns:
+        cols = list(df.columns)
         cols.remove("Dokter")
         cols.append("Dokter")
         df = df[cols]
