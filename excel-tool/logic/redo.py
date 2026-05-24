@@ -17,10 +17,19 @@ TANGGAL_MERAH = pd.to_datetime([
 
 
 # =========================
-# SAFE DATETIME (ANTI 1970 FIX)
+# SAFE DATETIME
 # =========================
 def safe_datetime(col):
     return pd.to_datetime(col, errors="coerce")
+
+
+# =========================
+# SAFE TEXT
+# =========================
+def safe_text(x):
+    if pd.isna(x):
+        return x
+    return str(x)
 
 
 # =========================
@@ -37,7 +46,7 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame):
     df.columns = df.columns.str.strip()
 
     # =========================
-    # HAPUS DATA DARI TOTAL
+    # HAPUS TOTAL
     # =========================
     idx_total = df[
         df.astype(str).apply(
@@ -50,14 +59,14 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame):
         df = df.loc[:idx_total[0] - 1]
 
     # =========================
-    # FILL TANGGAL (SAFE)
+    # TANGGAL
     # =========================
     if "Tanggal" in df.columns:
         df["Tanggal"] = pd.to_datetime(df["Tanggal"], errors="coerce")
         df["Tanggal"] = df["Tanggal"].ffill()
 
     # =========================
-    # DROP KOLOM TIDAK DIPAKAI
+    # DROP KOLOM
     # =========================
     hapus_kolom = [
         "No Reservasi", "Pembuat", "Customer", "Kota",
@@ -71,7 +80,7 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame):
     df = df.drop(columns=hapus_kolom, errors="ignore")
 
     # =========================
-    # DATE FIX (INI YANG NGHILANGIN 1970)
+    # DATE FIX (ANTI 1970)
     # =========================
     if "Jadwal Selesai" in df.columns:
         df["Jadwal Selesai"] = safe_datetime(df["Jadwal Selesai"])
@@ -94,17 +103,14 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame):
         return tanggal
 
     # =========================
-    # AUTO FILL JADWAL
+    # AUTO JADWAL
     # =========================
     if "Jadwal Selesai" in df.columns and "Jadwal/Janji Kirim" in df.columns:
 
         mask = df["Jadwal/Janji Kirim"].isna()
 
-        df.loc[mask, "Jadwal/Janji Kirim"] = df.loc[mask, "Jadwal Selesai"].apply(
-            next_working_day
-        )
+        df.loc[mask, "Jadwal/Janji Kirim"] = df.loc[mask, "Jadwal Selesai"].apply(next_working_day)
 
-        # COPY tanpa convert ke string "-"
         df["Jadwal Selesai"] = df["Jadwal/Janji Kirim"]
 
     # =========================
@@ -117,26 +123,22 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame):
         df = df[~df["Produk Gigi"].astype(str).str.upper().str.contains(pattern, na=False)]
 
     # =========================
-    # FIX NOMOR
+    # FIX NOMOR (INI YANG KEMARIN ERROR)
     # =========================
-    def safe_text(x):
-    if x is None:
-        return x
-    if pd.isna(x):
-        return x
-    return str(x)
+    if "Nomor" in df.columns:
 
-df["Nomor"] = df["Nomor"].apply(safe_text)
+        df["Nomor"] = df["Nomor"].apply(safe_text)
 
-df["Nomor"] = df["Nomor"].apply(
-    lambda x: re.sub(r'\s+', ' ', x).strip() if pd.notna(x) else x
-)
+        df["Nomor"] = df["Nomor"].apply(
+            lambda x: re.sub(r'\s+', ' ', x).strip() if pd.notna(x) else x
+        )
 
-df["Nomor"] = df["Nomor"].apply(
-    lambda x: re.sub(r'\bK\b', 'Konfirmasi', x) if pd.notna(x) else x
-)
+        df["Nomor"] = df["Nomor"].apply(
+            lambda x: re.sub(r'\bK\b', 'Konfirmasi', x) if pd.notna(x) else x
+        )
 
-        # IMPORTANT: pakai NaT (BUKAN "-")
+        mask_konfirmasi = df["Nomor"].astype(str).str.contains("Konfirmasi", case=False, na=False)
+
         if "Jadwal/Janji Kirim" in df.columns:
             df.loc[mask_konfirmasi, "Jadwal/Janji Kirim"] = pd.NaT
 
@@ -144,7 +146,7 @@ df["Nomor"] = df["Nomor"].apply(
             df.loc[mask_konfirmasi, "Jadwal Selesai"] = pd.NaT
 
     # =========================
-    # USER ID FROM MASTER (FIXED TOTAL SAFE)
+    # USER ID MASTER
     # =========================
     if df_master is not None and "ID Member" in df.columns:
 
@@ -172,12 +174,11 @@ df["Nomor"] = df["Nomor"].apply(
 
             df.drop(columns=["Kode", "ID Member_y"], inplace=True, errors="ignore")
 
-            # fallback aman
             df["User ID"] = df["User ID"].replace(["nan", "", "None", "-", " "], pd.NA)
             df["User ID"] = df["User ID"].fillna(df["ID Member"])
 
     # =========================
-    # FINAL CLEAN (ANTI ERROR TYPE)
+    # FINAL CLEAN
     # =========================
     for col in ["Jadwal Selesai", "Jadwal/Janji Kirim"]:
         if col in df.columns:
