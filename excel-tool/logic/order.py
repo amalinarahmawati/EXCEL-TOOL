@@ -18,10 +18,31 @@ tanggal_merah = pd.to_datetime([
 
 
 # =========================
-# SAFE DATETIME
+# 🔥 FIX UTAMA (ANTI 1970 TOTAL FIX)
 # =========================
-def safe_datetime(series):
-    return pd.to_datetime(series, errors="coerce")
+def normalize_excel_date(series):
+
+    # STEP 1: paksa numeric dulu
+    num = pd.to_numeric(series, errors="coerce")
+
+    # STEP 2: deteksi Excel serial valid
+    # (Excel date normal range ~ 20000 - 80000)
+    mask = (num > 20000) & (num < 80000)
+
+    result = pd.Series(pd.NaT, index=series.index)
+
+    # Excel serial convert
+    result.loc[mask] = pd.to_datetime(
+        num.loc[mask],
+        unit="D",
+        origin="1899-12-30",
+        errors="coerce"
+    )
+
+    # STEP 3: string fallback (yang bukan numeric)
+    result.loc[~mask] = pd.to_datetime(series[~mask], errors="coerce")
+
+    return result
 
 
 # =========================
@@ -40,7 +61,7 @@ def next_working_day(t):
 
 
 # =========================
-# MAIN FUNCTION (FIXED)
+# MAIN FUNCTION
 # =========================
 def proses_order(df):
 
@@ -61,19 +82,19 @@ def proses_order(df):
         df = df.loc[:idx_total[0] - 1].copy()
 
     # =========================
-    # TANGGAL SAFE (IMPORTANT FIX)
+    # DATE FIX (SEMUA HARUS LEWAT SINI)
     # =========================
     if "Tanggal" in df.columns:
-        df["Tanggal"] = safe_datetime(df["Tanggal"]).ffill()
+        df["Tanggal"] = normalize_excel_date(df["Tanggal"]).ffill()
 
     # =========================
-    # DROP COLUMN INDEX 17 SAFER
+    # DROP COLUMN INDEX 17
     # =========================
     if len(df.columns) > 17:
         df = df.drop(df.columns[17], axis=1)
 
     # =========================
-    # DROP UNUSED COLS
+    # DROP UNUSED
     # =========================
     hapus_kolom = [
         "No Reservasi","Pembuat","Customer","Kota",
@@ -88,11 +109,11 @@ def proses_order(df):
     df = df.drop(columns=hapus_kolom, errors="ignore")
 
     # =========================
-    # DATE FIX (CRITICAL FIX)
+    # DATE FIX (WAJIB SEMUA COL)
     # =========================
     for col in ["Jadwal Selesai", "Jadwal/Janji Kirim"]:
         if col in df.columns:
-            df[col] = safe_datetime(df[col])
+            df[col] = normalize_excel_date(df[col])
 
     # =========================
     # AUTO JADWAL
@@ -105,7 +126,6 @@ def proses_order(df):
             df.loc[mask, "Jadwal Selesai"].apply(next_working_day)
         )
 
-        # copy hasil
         df["Jadwal Selesai"] = df["Jadwal/Janji Kirim"]
 
     # =========================
@@ -140,33 +160,28 @@ def proses_order(df):
         df.loc[mask_konfirmasi, ["Jadwal/Janji Kirim","Jadwal Selesai"]] = pd.NaT
 
     # =========================
-    # USER ID CLEAN
+    # USER CLEAN
     # =========================
     for col in ["User ID","ID Member"]:
         if col in df.columns:
-            df[col] = (
-                df[col]
-                .astype(str)
-                .replace({"nan":pd.NA,"None":pd.NA,"-":pd.NA,"":pd.NA})
-                .str.strip()
-            )
+            df[col] = df[col].astype(str).replace({
+                "nan":pd.NA,"None":pd.NA,"-":pd.NA,"":pd.NA
+            }).str.strip()
 
-    # fill user id
     if "User ID" in df.columns and "ID Member" in df.columns:
         df["User ID"] = df["User ID"].fillna(df["ID Member"])
 
     # =========================
-    # DUPLICATE LOGIC (SAFE VERSION)
+    # DUPLICATE FIX
     # =========================
     if "User ID" in df.columns and "ID Member" in df.columns:
 
         special = df["ID Member"].astype(str).str.count("-") == 2
 
-        extra_rows = df[special & (df["User ID"] != df["ID Member"])].copy()
-        extra_rows["User ID"] = extra_rows["ID Member"]
+        extra = df[special & (df["User ID"] != df["ID Member"])].copy()
+        extra["User ID"] = extra["ID Member"]
 
-        df = pd.concat([df, extra_rows], ignore_index=True)
-
+        df = pd.concat([df, extra], ignore_index=True)
         df = df.drop(columns=["ID Member"], errors="ignore")
 
     # =========================
