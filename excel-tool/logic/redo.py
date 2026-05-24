@@ -20,15 +20,15 @@ def safe_text(x):
 
 
 # =========================
-# 🔥 FIX UTAMA: EXCEL DATE SAFE CONVERTER
+# 🔥 SAFE DATETIME (ANTI 1970 FIX TOTAL)
 # =========================
 def fix_excel_datetime(series):
-    """
-    FIX 1970 ROOT CAUSE:
-    handle Excel serial date + string + datetime mix
-    """
 
-    # numeric excel serial
+    # sudah datetime → langsung return (JANGAN DIAPA-APAIN)
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return series
+
+    # numeric (Excel serial)
     if pd.api.types.is_numeric_dtype(series):
         return pd.to_datetime(series, unit="d", origin="1899-12-30", errors="coerce")
 
@@ -36,6 +36,9 @@ def fix_excel_datetime(series):
     return pd.to_datetime(series, errors="coerce")
 
 
+# =========================
+# MAIN FUNCTION
+# =========================
 def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
 
     df = df.copy()
@@ -57,7 +60,7 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
         df = df.loc[:idx_total[0] - 1].copy()
 
     # =========================
-    # FILL TANGGAL
+    # TANGGAL (ONLY ONCE)
     # =========================
     if "Tanggal" in df.columns:
         df["Tanggal"] = fix_excel_datetime(df["Tanggal"]).ffill()
@@ -76,11 +79,14 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
     df = df.drop(columns=drop_cols, errors="ignore")
 
     # =========================
-    # 🔥 FIX DATE (INI KUNCI)
+    # 🔥 FIX DATE (ANTI DOUBLE CONVERT)
     # =========================
     for col in ["Jadwal Selesai", "Jadwal/Janji Kirim"]:
         if col in df.columns:
-            df[col] = fix_excel_datetime(df[col])
+
+            # kalau sudah datetime → skip convert
+            if not pd.api.types.is_datetime64_any_dtype(df[col]):
+                df[col] = fix_excel_datetime(df[col])
 
     # =========================
     # NEXT WORKING DAY
@@ -97,7 +103,7 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
         return t
 
     # =========================
-    # AUTO FILL
+    # AUTO FILL JADWAL
     # =========================
     if "Jadwal Selesai" in df.columns and "Jadwal/Janji Kirim" in df.columns:
 
@@ -131,7 +137,7 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
         df.loc[mask_konfirmasi, "Jadwal Selesai"] = pd.NaT
 
     # =========================
-    # USER ID
+    # USER ID (SAFE MERGE)
     # =========================
     if df_master is not None and "ID Member" in df.columns:
 
