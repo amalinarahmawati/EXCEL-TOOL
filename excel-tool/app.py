@@ -62,7 +62,7 @@ uploaded_file = st.file_uploader("Upload Excel", type=["xlsx", "xls"])
 # ======================
 master_file = None
 
-if menu in ["Redo", "Redo Dentcore"]:
+if menu in ["Redo", "Cabut Pending", "Redo Dentcore"]:
     st.subheader("📌 Upload Master Data (WAJIB)")
     master_file = st.file_uploader("Upload Master Excel", type=["xlsx", "xls"], key="master")
 
