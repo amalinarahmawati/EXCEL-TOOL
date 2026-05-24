@@ -219,9 +219,9 @@ def proses_order(df):
             ] = pd.NaT
 
     # =========================
-    # USER ID CLEAN (FIX TOTAL)
-    # =========================
-    if "User ID" in df.columns:
+# USER ID CLEAN (FIX TOTAL)
+# =========================
+if "User ID" in df.columns:
 
     df["User ID"] = (
         df["User ID"]
@@ -239,7 +239,7 @@ def proses_order(df):
         })
     )
 
-    if "ID Member" in df.columns:
+if "ID Member" in df.columns:
 
     df["ID Member"] = (
         df["ID Member"]
@@ -257,12 +257,13 @@ def proses_order(df):
         })
     )
 
-# isi User ID dari ID Member
+# isi User ID dari ID Member (SAFE)
 if "User ID" in df.columns and "ID Member" in df.columns:
     df["User ID"] = df["User ID"].fillna(df["ID Member"])
 
-# FINAL SAFETY CHECK (INI YANG KAMU KURANG)
-df["User ID"] = df["User ID"].replace(["-", "–", "—"], pd.NA)
+# FINAL SAFETY CLEAN (WAJIB DI DALAM FUNCTION)
+if "User ID" in df.columns:
+    df["User ID"] = df["User ID"].replace(["-", "–", "—"], pd.NA)
 
     # =========================
     # DUPLICATE LOGIC FIX
