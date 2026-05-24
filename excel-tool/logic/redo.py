@@ -158,8 +158,8 @@ def proses_redo(df, df_master=None):
 
         df.loc[mask_konfirmasi, ["Jadwal Selesai", "Jadwal/Janji Kirim"]] = pd.NaT
 
-    # =========================
-    # USER ID SAFE (SAMAIN DENGAN CABUT PENDING)
+     # =========================
+    # USER ID REBUILD (MASTER ONLY, DROP TOTAL OLD)
     # =========================
     if df_master is not None:
 
@@ -181,19 +181,46 @@ def proses_redo(df, df_master=None):
 
             df["User ID"] = df["ID Member"].astype(str).str.strip().map(mapping)
 
-    # fallback aman
+    # fallback
     if "User ID" not in df.columns:
         df["User ID"] = df.get("ID Member", pd.NA)
 
-    # CLEAN USER ID
-    df["User ID"] = (
-        df["User ID"]
-        .astype(str)
-        .replace({"nan": pd.NA, "None": pd.NA, "-": pd.NA, "": pd.NA})
-        .str.strip()
-    )
+    # =========================
+    # CLEAN USER ID (ANTI NAN CRASH)
+    # =========================
+    for col in ["User ID", "ID Member"]:
+        if col in df.columns:
+            df[col] = (
+                df[col]
+                .astype(str)
+                .replace({"nan": pd.NA, "None": pd.NA, "-": pd.NA, "": pd.NA})
+                .str.strip()
+            )
 
-    if "ID Member" in df.columns:
+    if "User ID" in df.columns and "ID Member" in df.columns:
         df["User ID"] = df["User ID"].fillna(df["ID Member"])
+
+    # =========================
+    # DUPLICATE FIX (SAFE VERSION)
+    # =========================
+    if "ID Member" in df.columns:
+
+        result = []
+
+        for _, row in df.iterrows():
+
+            result.append(row.copy())
+
+            id_member = str(row.get("ID Member", ""))
+
+            if id_member.count("-") == 2 and id_member not in ["nan", "", "None"]:
+
+                if row.get("User ID") != id_member:
+                    new_row = row.copy()
+                    new_row["User ID"] = id_member
+                    result.append(new_row)
+
+        df = pd.DataFrame(result)
+        df = df.drop(columns=["ID Member"], errors="ignore")
 
     return df
