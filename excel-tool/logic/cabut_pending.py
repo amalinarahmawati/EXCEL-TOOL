@@ -107,64 +107,27 @@ def proses_cabut_pending(df, df_master=None):
 
         df.loc[mask_konfirmasi, ["Jadwal Selesai", "Janji Kirim"]] = pd.NaT
 
-    # =========================
-    # MASTER USER ID (SAFE MERGE)
+     # =========================
+    # USER ID SAFE
     # =========================
     if df_master is not None and "ID Member" in df.columns:
 
         df_master.columns = df_master.columns.str.strip()
 
-        df_master["Kode"] = df_master["Kode"].astype(str).str.strip()
-        df_master["ID Member"] = df_master["ID Member"].astype(str).str.strip()
-        df["ID Member"] = df["ID Member"].astype(str).str.strip()
+        if "Kode" in df_master.columns and "ID Member" in df_master.columns:
 
-        df = df.merge(
-            df_master[["Kode", "ID Member"]],
-            left_on="ID Member",
-            right_on="Kode",
-            how="left",
-            suffixes=("", "_m")
-        )
+            mapping = dict(zip(
+                df_master["Kode"].astype(str).str.strip(),
+                df_master["ID Member"].astype(str).str.strip()
+            ))
 
-        df["User ID"] = df["ID Member_m"]
-        df = df.drop(columns=["Kode", "ID Member_m"], errors="ignore")
+            df["User ID"] = df["ID Member"].astype(str).str.strip().map(mapping)
 
-    # fallback
     if "User ID" not in df.columns:
         df["User ID"] = pd.NA
 
     if "ID Member" in df.columns:
         df["User ID"] = df["User ID"].fillna(df["ID Member"])
-
-    # =========================
-    # FINAL CLEAN (ANTI NAN STRING)
-    # =========================
-    df["User ID"] = df["User ID"].replace(
-        ["nan", "None", "", "-", " "],
-        pd.NA
-    )
-
-    # =========================
-    # DUPLICATE RULE
-    # =========================
-    if "User ID" in df.columns and "ID Member" in df.columns:
-
-        result = []
-
-        for _, row in df.iterrows():
-
-            result.append(row.copy())
-
-            id_member = str(row.get("ID Member", ""))
-
-            if id_member.count("-") == 2 and id_member != "nan":
-                if row["User ID"] != id_member:
-                    new_row = row.copy()
-                    new_row["User ID"] = id_member
-                    result.append(new_row)
-
-        df = pd.DataFrame(result)
-        df = df.drop(columns=["ID Member"], errors="ignore")
 
     # =========================
     # POSISI KOLOM
