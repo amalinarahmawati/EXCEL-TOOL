@@ -141,24 +141,6 @@ def proses_order(df):
     ):
         df["Jadwal Selesai"] = df["Jadwal/Janji Kirim"]
 
-    # =========================
-    # POSISI KOLOM PASIEN
-    # =========================
-    cols = list(df.columns)
-
-    if "Pasien" in cols and "User ID" in cols:
-        cols.remove("Pasien")
-        cols.insert(cols.index("User ID"), "Pasien")
-        df = df[cols]
-
-    # =========================
-    # DOKTER KE AKHIR
-    # =========================
-    if "Dokter" in df.columns:
-        cols = list(df.columns)
-        cols.remove("Dokter")
-        cols.append("Dokter")
-        df = df[cols]
 
     # =========================
     # HAPUS PRODUK TERTENTU
@@ -299,6 +281,25 @@ def proses_order(df):
         df = pd.DataFrame(result)
 
         df = df.drop(columns=["ID Member"], errors="ignore")
+
+    # =========================
+    # POSISI KOLOM PASIEN
+    # =========================
+    cols = list(df.columns)
+
+    if "Pasien" in cols and "User ID" in cols:
+        cols.remove("Pasien")
+        cols.insert(cols.index("User ID"), "Pasien")
+        df = df[cols]
+
+    # =========================
+    # DOKTER KE AKHIR
+    # =========================
+    if "Dokter" in df.columns:
+        cols = list(df.columns)
+        cols.remove("Dokter")
+        cols.append("Dokter")
+        df = df[cols]
 
     # =========================
     # OPTIONAL: TAMPILKAN "-"
