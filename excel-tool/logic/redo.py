@@ -20,17 +20,27 @@ def safe_text(x):
 
 
 # =========================
-# 🔥 SAFE DATETIME (ANTI 1970 FIX TOTAL)
+# 🔥 FIX DATE TOTAL (ANTI 1970 FULL)
 # =========================
 def fix_excel_datetime(series):
 
-    # sudah datetime → langsung return (JANGAN DIAPA-APAIN)
+    # kalau sudah datetime → langsung return
     if pd.api.types.is_datetime64_any_dtype(series):
         return series
 
-    # numeric (Excel serial)
+    # numeric Excel serial (INI FIX UTAMA)
     if pd.api.types.is_numeric_dtype(series):
-        return pd.to_datetime(series, unit="d", origin="1899-12-30", errors="coerce")
+        s = pd.to_numeric(series, errors="coerce")
+
+        # filter angka valid Excel date (hindari noise)
+        s = s.where(s > 20000)
+
+        return pd.to_datetime(
+            s,
+            unit="D",  # 🔥 HARUS D BESAR
+            origin="1899-12-30",
+            errors="coerce"
+        )
 
     # string / object
     return pd.to_datetime(series, errors="coerce")
@@ -60,10 +70,10 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
         df = df.loc[:idx_total[0] - 1].copy()
 
     # =========================
-    # TANGGAL (ONLY ONCE)
+    # TANGGAL
     # =========================
     if "Tanggal" in df.columns:
-        df["Tanggal"] = fix_excel_datetime(df["Tanggal"]).ffill()
+        df["Tanggal"] = fix_excel_datetime(df["Tanggal"]).ffill().dt.normalize()
 
     # =========================
     # DROP KOLOM
@@ -79,14 +89,12 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
     df = df.drop(columns=drop_cols, errors="ignore")
 
     # =========================
-    # 🔥 FIX DATE (ANTI DOUBLE CONVERT)
+    # DATE FIX (ANTI DOUBLE BUG)
     # =========================
     for col in ["Jadwal Selesai", "Jadwal/Janji Kirim"]:
-        if col in df.columns:
 
-            # kalau sudah datetime → skip convert
-            if not pd.api.types.is_datetime64_any_dtype(df[col]):
-                df[col] = fix_excel_datetime(df[col])
+        if col in df.columns:
+            df[col] = fix_excel_datetime(df[col]).dt.normalize()
 
     # =========================
     # NEXT WORKING DAY
@@ -137,7 +145,7 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
         df.loc[mask_konfirmasi, "Jadwal Selesai"] = pd.NaT
 
     # =========================
-    # USER ID (SAFE MERGE)
+    # USER ID
     # =========================
     if df_master is not None and "ID Member" in df.columns:
 
