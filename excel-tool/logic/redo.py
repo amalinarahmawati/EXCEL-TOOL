@@ -15,7 +15,8 @@ TANGGAL_MERAH = pd.to_datetime([
     "2026-12-25"
 ])
 
-
+if "Nomor" in df.columns:
+    df["Nomor"] = df["Nomor"].astype("string")
 # =========================
 # SAFE DATETIME (ANTI 1970 FIX)
 # =========================
@@ -120,9 +121,19 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame):
     # FIX NOMOR
     # =========================
     if "Nomor" in df.columns:
-        df["Nomor"] = df["Nomor"].astype(str).apply(
-            lambda x: re.sub(r'\bK\b', 'Konfirmasi',
-                    re.sub(r'\s+', ' ', x)).strip()
+        def fix_nomor(x):
+    if pd.isna(x):
+        return x
+
+    x = str(x)
+
+    x = re.sub(r'\s+', ' ', x)
+    x = re.sub(r'\bK\b', 'Konfirmasi', x)
+
+    return x.strip()
+
+
+df["Nomor"] = df["Nomor"].apply(fix_nomor)
         )
 
         mask_konfirmasi = df["Nomor"].str.contains("Konfirmasi", case=False, na=False)
