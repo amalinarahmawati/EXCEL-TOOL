@@ -16,20 +16,33 @@ tanggal_merah = pd.to_datetime([
 
 
 # =========================
-# SAFE DATE (ANTI 1970)
+# SAFE DATE (FIX ANTI 1970 FULL)
 # =========================
 def safe_date(series):
-    s = pd.to_numeric(series, errors="coerce")
+    s = pd.Series(series)
 
-    if s.notna().sum() > len(series) * 0.3:
-        return pd.to_datetime(
-            s,
-            unit="D",
-            origin="1899-12-30",
-            errors="coerce"
-        )
+    # kalau sudah datetime
+    if pd.api.types.is_datetime64_any_dtype(s):
+        return s
 
-    return pd.to_datetime(series, errors="coerce")
+    num = pd.to_numeric(s, errors="coerce")
+
+    # Excel serial detect
+    excel = pd.to_datetime(
+        num,
+        unit="D",
+        origin="1899-12-30",
+        errors="coerce"
+    )
+
+    # string datetime fallback
+    text = pd.to_datetime(s, errors="coerce")
+
+    # merge smart (pilih yang valid)
+    result = excel.copy()
+    result[text.notna()] = text[text.notna()]
+
+    return result
 
 
 # =========================
@@ -48,7 +61,7 @@ def next_working_day(t):
 
 
 # =========================
-# MAIN
+# MAIN FUNCTION
 # =========================
 def proses_cabut_pending(df, df_master=None):
 
@@ -69,13 +82,13 @@ def proses_cabut_pending(df, df_master=None):
         df = df.loc[:idx_total[0] - 1].copy()
 
     # =========================
-    # DATE
+    # TANGGAL FIX (ANTI 1970)
     # =========================
     if "Tanggal" in df.columns:
         df["Tanggal"] = safe_date(df["Tanggal"]).ffill()
 
     # =========================
-    # DROP USER ID LAMA (WAJIB)
+    # DROP USER ID LAMA (WAJIB CLEAN START)
     # =========================
     df = df.drop(columns=["Waktu Cabut", "Customer", "User ID"], errors="ignore")
 
@@ -91,7 +104,8 @@ def proses_cabut_pending(df, df_master=None):
         mask = df["Janji Kirim"].isna()
 
         df.loc[mask, "Janji Kirim"] = df.loc[
-            mask, "Jadwal Selesai"
+            mask,
+            "Jadwal Selesai"
         ].apply(next_working_day)
 
         df["Jadwal Selesai"] = df["Janji Kirim"]
@@ -112,8 +126,18 @@ def proses_cabut_pending(df, df_master=None):
         df.loc[mask_konfirmasi, ["Jadwal Selesai", "Janji Kirim"]] = pd.NaT
 
     # =========================
-    # 🔥 USER ID REBUILD TOTAL (NO LAMA KEPAKAI)
     # =========================
+    # USER ID REBUILD (FIXED 100%)
+    # =========================
+    df["ID Member"] = df.get("ID Member", pd.NA)
+
+    df["ID Member"] = (
+        df["ID Member"]
+        .astype(str)
+        .replace({"nan": pd.NA, "None": pd.NA, "-": pd.NA, "": pd.NA})
+        .str.strip()
+    )
+
     if df_master is not None:
 
         df_master = df_master.copy()
@@ -129,56 +153,42 @@ def proses_cabut_pending(df, df_master=None):
 
             mapping = df_master.set_index("Kode")["ID Member"].astype(str).to_dict()
 
-            df["ID Member"] = df.get("ID Member", pd.NA)
-
-            # CLEAN dulu ID Member
-            df["ID Member"] = (
-                df["ID Member"]
-                .astype(str)
-                .replace({"nan": pd.NA, "None": pd.NA, "-": pd.NA, "": pd.NA})
-                .str.strip()
-            )
-
-            # 🔥 REBUILD TOTAL USER ID (NO FALLBACK FROM OLD USER ID)
+            # 🔥 REBUILD TOTAL (NO OLD USER ID ANYWHERE)
             df["User ID"] = df["ID Member"].map(mapping)
 
     else:
         df["User ID"] = pd.NA
 
-    # =========================
     # fallback terakhir (ONLY ID MEMBER)
-    # =========================
-    df["User ID"] = df["User ID"].fillna(df.get("ID Member", pd.NA))
+    df["User ID"] = df["User ID"].fillna(df["ID Member"])
 
     # =========================
-    # DUPLICATE LOGIC (SAMA REDO STYLE)
+    # DUPLICATE LOGIC (REDO STYLE)
     # =========================
-    if "ID Member" in df.columns:
+    result = []
 
-        result = []
+    for _, row in df.iterrows():
 
-        for _, row in df.iterrows():
+        result.append(row.copy())
 
-            result.append(row.copy())
+        id_member = str(row.get("ID Member", ""))
 
-            id_member = str(row.get("ID Member", ""))
+        if id_member.count("-") == 2 and id_member != "nan":
 
-            if id_member.count("-") == 2 and id_member != "nan":
+            if row.get("User ID") != id_member:
+                new_row = row.copy()
+                new_row["User ID"] = id_member
+                result.append(new_row)
 
-                if row.get("User ID") != id_member:
-                    new_row = row.copy()
-                    new_row["User ID"] = id_member
-                    result.append(new_row)
-
-        df = pd.DataFrame(result)
+    df = pd.DataFrame(result)
 
     # =========================
-    # DROP ID MEMBER (FINAL CLEAN)
+    # DROP ID MEMBER FINAL
     # =========================
     df = df.drop(columns=["ID Member"], errors="ignore")
 
     # =========================
-    # POSITION (REDO STYLE)
+    # POSISI KOLOM (REDO STYLE)
     # =========================
     cols = list(df.columns)
 
@@ -193,3 +203,18 @@ def proses_cabut_pending(df, df_master=None):
         df = df[cols]
 
     return df
+
+
+# =========================
+# RUN
+# =========================
+if __name__ == "__main__":
+
+    df = pd.read_excel("cabut pending 04.xls")
+    df_master = pd.read_excel("Member user master3.xlsx")
+
+    hasil = proses_cabut_pending(df, df_master)
+
+    hasil.to_excel("hasil_cabut_pending_final.xlsx", index=False)
+
+    print("SELESAI 🚀")
