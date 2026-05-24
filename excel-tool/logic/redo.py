@@ -15,8 +15,7 @@ TANGGAL_MERAH = pd.to_datetime([
     "2026-12-25"
 ])
 
-if "Nomor" in df.columns:
-    df["Nomor"] = df["Nomor"].astype("string")
+
 # =========================
 # SAFE DATETIME (ANTI 1970 FIX)
 # =========================
