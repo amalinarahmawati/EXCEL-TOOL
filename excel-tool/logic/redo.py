@@ -3,25 +3,16 @@ import numpy as np
 import re
 from datetime import timedelta
 
+
 # =========================
-# HOLIDAY
+# HOLIDAY LIST
 # =========================
 tanggal_merah = pd.to_datetime([
-    "2026-01-01",
-    "2026-01-16",
-    "2026-02-17",
-    "2026-03-19",
-    "2026-03-21",
-    "2026-03-22",
-    "2026-04-03",
-    "2026-05-01",
-    "2026-05-14",
-    "2026-05-27",
-    "2026-05-31",
-    "2026-06-01",
-    "2026-06-16",
-    "2026-08-17",
-    "2026-08-25",
+    "2026-01-01", "2026-01-16", "2026-02-17",
+    "2026-03-19", "2026-03-21", "2026-03-22",
+    "2026-04-03", "2026-05-01", "2026-05-14",
+    "2026-05-27", "2026-05-31", "2026-06-01",
+    "2026-06-16", "2026-08-17", "2026-08-25",
     "2026-12-25"
 ])
 
@@ -30,9 +21,13 @@ def next_working_day(tanggal):
     if pd.isna(tanggal):
         return pd.NaT
 
+    tanggal = pd.to_datetime(tanggal, errors="coerce")
+    if pd.isna(tanggal):
+        return pd.NaT
+
     tanggal = tanggal + timedelta(days=1)
 
-    while tanggal.weekday() == 6 or tanggal in tanggal_merah:
+    while tanggal.weekday() == 6 or tanggal.normalize() in tanggal_merah:
         tanggal = tanggal + timedelta(days=1)
 
     return tanggal
@@ -41,29 +36,30 @@ def next_working_day(tanggal):
 # =========================
 # MAIN FUNCTION
 # =========================
-def proses_redo(df, df_master=None):
+def proses_redo(df, df_master):
 
     df = df.copy()
-    df.columns = df.columns.str.strip()
-
-    # =========================
-    # MASTER CHECK
-    # =========================
-    if df_master is None:
-        raise ValueError("❌ Master belum diupload")
-
     df_master = df_master.copy()
+
+    # =========================
+    # CLEAN COLUMN
+    # =========================
+    df.columns = df.columns.str.strip()
     df_master.columns = df_master.columns.str.strip()
+
+    # =========================
+    # VALIDATE MASTER
+    # =========================
+    if df_master is None or df_master.empty:
+        raise ValueError("Master belum diupload")
 
     # =========================
     # CUT TOTAL
     # =========================
-    idx_total = df[
-        df.astype(str).apply(
-            lambda row: row.str.contains("TOTAL", case=False, na=False).any(),
-            axis=1
-        )
-    ].index
+    idx_total = df[df.astype(str).apply(
+        lambda row: row.str.contains("TOTAL", case=False, na=False).any(),
+        axis=1
+    )].index
 
     if len(idx_total) > 0:
         df = df.loc[:idx_total[0] - 1]
@@ -78,27 +74,18 @@ def proses_redo(df, df_master=None):
     # DROP UNUSED COLUMNS
     # =========================
     hapus_kolom = [
-        "No Reservasi",
-        "Pembuat",
-        "Customer",
-        "Kota",
-        "Proses Order",
-        "Jam Terima Order",
-        "Jam Selesai",
-        "Jadwal Delivery",
-        "Cito",
-        "Ketr Cito",
-        "No Order Lanjutan",
-        "Personalia",
+        "No Reservasi", "Pembuat", "Customer", "Kota",
+        "Proses Order", "Jam Terima Order", "Jam Selesai",
+        "Jadwal Delivery", "Cito", "Ketr Cito",
+        "No Order Lanjutan", "Personalia",
         "Melanjutkan Jadwal Order",
-        "No Resi Pengiriman",
-        "Alasan Redo",
+        "No Resi Pengiriman", "Alasan Redo"
     ]
 
     df = df.drop(columns=[c for c in hapus_kolom if c in df.columns], errors="ignore")
 
     # =========================
-    # DATE CLEAN
+    # JADWAL OTOMATIS
     # =========================
     if "Jadwal Selesai" in df.columns:
         df["Jadwal Selesai"] = pd.to_datetime(df["Jadwal Selesai"], errors="coerce")
@@ -109,49 +96,36 @@ def proses_redo(df, df_master=None):
         mask = df["Jadwal/Janji Kirim"].isna()
         df.loc[mask, "Jadwal/Janji Kirim"] = df.loc[mask, "Jadwal Selesai"].apply(next_working_day)
 
-    # copy logic
+    # copy
     if "Jadwal/Janji Kirim" in df.columns:
         df["Jadwal Selesai"] = df["Jadwal/Janji Kirim"]
 
     # =========================
-    # PRODUCT FILTER
+    # REMOVE PRODUK
     # =========================
     if "Produk Gigi" in df.columns:
         produk_hapus = ["22 COR MODEL STONE", "22 COR TYPE III"]
         pattern = "|".join(produk_hapus)
 
-        df = df[~df["Produk Gigi"]
-                .astype(str)
-                .str.upper()
-                .str.contains(pattern, na=False)]
+        df = df[~df["Produk Gigi"].astype(str).str.upper().str.contains(pattern, na=False)]
 
     # =========================
-    # NOMOR FIX
+    # FIX NOMOR
     # =========================
     if "Nomor" in df.columns:
 
-        def fix_nomor(x):
-            if pd.isna(x):
-                return x
-            x = str(x)
-            x = re.sub(r'\bK\b', 'Konfirmasi', x)
-            x = re.sub(r'\s+', ' ', x).strip()
-            return x
-
-        df["Nomor"] = df["Nomor"].apply(fix_nomor)
-
-        mask_konfirmasi = df["Nomor"].astype(str).str.contains(
-            "Konfirmasi", case=False, na=False
+        df["Nomor"] = df["Nomor"].astype(str).apply(
+            lambda x: re.sub(r"\bK\b", "Konfirmasi", re.sub(r"\s+", " ", x)).strip()
         )
 
-        for col in ["Jadwal/Janji Kirim", "Jadwal Selesai"]:
-            if col in df.columns:
-                df.loc[mask_konfirmasi, col] = np.nan
+        mask_konfirmasi = df["Nomor"].str.contains("Konfirmasi", case=False, na=False)
+
+        df.loc[mask_konfirmasi, ["Jadwal/Janji Kirim", "Jadwal Selesai"]] = pd.NaT
 
     # =========================
-    # MASTER MERGE (SAFE)
+    # ===== MASTER MERGE =====
     # =========================
-    if "ID Member" in df.columns and "Kode" in df_master.columns:
+    if "ID Member" in df.columns:
 
         df["ID Member"] = df["ID Member"].astype(str).str.strip()
         df_master["Kode"] = df_master["Kode"].astype(str).str.strip()
@@ -160,56 +134,71 @@ def proses_redo(df, df_master=None):
             df_master[["Kode", "ID Member"]],
             left_on="ID Member",
             right_on="Kode",
-            how="left",
-            suffixes=("", "_master")
+            how="left"
         )
 
-        df["User ID"] = df.get("ID Member_master")
-
-        df = df.drop(columns=["Kode", "ID Member_master"], errors="ignore")
+        df["User ID"] = df["ID Member_y"]
+        df = df.drop(columns=["Kode", "ID Member_y"], errors="ignore")
 
     # =========================
-    # FALLBACK USER ID
+    # CLEAN USER ID (INI FIX UTAMA "-")
     # =========================
-    if "User ID" in df.columns and "ID Member" in df.columns:
+    if "User ID" in df.columns:
 
-        df["User ID"] = df["User ID"].replace(
-            ["nan", "", "None", "-", " "], pd.NA
+        df["User ID"] = (
+            df["User ID"]
+            .astype(str)
+            .str.strip()
+            .replace(["nan", "None", "", "-", "–", "—"], pd.NA)
         )
 
-        df["ID Member"] = df["ID Member"].replace(
-            ["nan", "", "None", " "], pd.NA
-        )
+    if "ID Member" in df.columns:
+        df["ID Member"] = df["ID Member"].astype(str).str.strip()
 
         df["User ID"] = df["User ID"].fillna(df["ID Member"])
 
-        result = []
-
-        for _, row in df.iterrows():
-
-            user_id = row["User ID"]
-            id_member = str(row.get("ID Member", ""))
-
-            is_special = id_member.count("-") == 2 and id_member != "nan"
-
-            result.append(row.copy())
-
-            if is_special and user_id != id_member:
-                new_row = row.copy()
-                new_row["User ID"] = id_member
-                result.append(new_row)
-
-        df = pd.DataFrame(result)
-
-        df = df.drop(columns=["ID Member"], errors="ignore")
+    # FINAL SAFETY
+    df["User ID"] = df["User ID"].replace(["-", "–", "—"], pd.NA)
 
     # =========================
-    # POSITION PASIEN
+    # DUPLICATE LOGIC
+    # =========================
+    result = []
+
+    for _, row in df.iterrows():
+
+        user_id = row.get("User ID")
+        id_member = str(row.get("ID Member", ""))
+
+        is_special = id_member.count("-") == 2 and id_member != "nan"
+
+        result.append(row.copy())
+
+        if pd.notna(user_id) and is_special and user_id != id_member:
+            new_row = row.copy()
+            new_row["User ID"] = id_member
+            result.append(new_row)
+
+    df = pd.DataFrame(result)
+
+    df = df.drop(columns=["ID Member"], errors="ignore")
+
+    # =========================
+    # PASIEN POSITION
     # =========================
     if "Pasien" in df.columns and "User ID" in df.columns:
         cols = list(df.columns)
         cols.remove("Pasien")
         cols.insert(cols.index("User ID"), "Pasien")
         df = df[cols]
+
+    # =========================
+    # OUTPUT CLEAN
+    # =========================
+    if "Jadwal/Janji Kirim" in df.columns:
+        df["Jadwal/Janji Kirim"] = df["Jadwal/Janji Kirim"].fillna("-")
+
+    if "Jadwal Selesai" in df.columns:
+        df["Jadwal Selesai"] = df["Jadwal Selesai"].fillna("-")
 
     return df
