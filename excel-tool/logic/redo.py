@@ -15,27 +15,21 @@ TANGGAL_MERAH = pd.to_datetime([
     "2026-12-25"
 ])
 
-
 # =========================
-# SAFE DATETIME
+# SAFE FUNCTIONS
 # =========================
 def safe_datetime(col):
     return pd.to_datetime(col, errors="coerce")
 
-
-# =========================
-# SAFE TEXT
-# =========================
 def safe_text(x):
     if pd.isna(x):
-        return x
+        return pd.NA
     return str(x)
-
 
 # =========================
 # MAIN FUNCTION
 # =========================
-def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame):
+def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
 
     df = df.copy()
     df_master = df_master.copy() if df_master is not None else None
@@ -46,7 +40,7 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame):
     df.columns = df.columns.str.strip()
 
     # =========================
-    # HAPUS TOTAL
+    # CUT TOTAL
     # =========================
     idx_total = df[
         df.astype(str).apply(
@@ -62,8 +56,7 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame):
     # TANGGAL
     # =========================
     if "Tanggal" in df.columns:
-        df["Tanggal"] = pd.to_datetime(df["Tanggal"], errors="coerce")
-        df["Tanggal"] = df["Tanggal"].ffill()
+        df["Tanggal"] = safe_datetime(df["Tanggal"]).ffill()
 
     # =========================
     # DROP KOLOM
@@ -91,16 +84,16 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame):
     # =========================
     # NEXT WORKING DAY
     # =========================
-    def next_working_day(tanggal):
-        if pd.isna(tanggal):
+    def next_working_day(t):
+        if pd.isna(t):
             return pd.NaT
 
-        tanggal = tanggal + timedelta(days=1)
+        t = t + timedelta(days=1)
 
-        while tanggal.weekday() == 6 or tanggal.normalize() in TANGGAL_MERAH:
-            tanggal = tanggal + timedelta(days=1)
+        while t.weekday() == 6 or t.normalize() in TANGGAL_MERAH:
+            t += timedelta(days=1)
 
-        return tanggal
+        return t
 
     # =========================
     # AUTO JADWAL
@@ -123,54 +116,56 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame):
         df = df[~df["Produk Gigi"].astype(str).str.upper().str.contains(pattern, na=False)]
 
     # =========================
-    # FIX NOMOR (INI YANG KEMARIN ERROR)
+    # FIX NOMOR (SAFE)
     # =========================
     if "Nomor" in df.columns:
 
         df["Nomor"] = df["Nomor"].apply(safe_text)
 
         df["Nomor"] = df["Nomor"].apply(
-            lambda x: re.sub(r'\s+', ' ', x).strip() if pd.notna(x) else x
+            lambda x: re.sub(r"\s+", " ", x).strip() if pd.notna(x) else x
         )
 
         df["Nomor"] = df["Nomor"].apply(
-            lambda x: re.sub(r'\bK\b', 'Konfirmasi', x) if pd.notna(x) else x
+            lambda x: re.sub(r"\bK\b", "Konfirmasi", x) if pd.notna(x) else x
         )
 
-        mask_konfirmasi = df["Nomor"].astype(str).str.contains("Konfirmasi", case=False, na=False)
+        mask_konfirmasi = df["Nomor"].astype(str).str.contains("Konfirmasi", na=False)
 
-        if "Jadwal/Janji Kirim" in df.columns:
-            df.loc[mask_konfirmasi, "Jadwal/Janji Kirim"] = pd.NaT
-
-        if "Jadwal Selesai" in df.columns:
-            df.loc[mask_konfirmasi, "Jadwal Selesai"] = pd.NaT
+        df.loc[mask_konfirmasi, "Jadwal/Janji Kirim"] = pd.NaT
+        df.loc[mask_konfirmasi, "Jadwal Selesai"] = pd.NaT
 
     # =========================
-# USER ID FROM MASTER (FIX CLEAN & SAFE)
-# =========================
-if df_master is not None:
+    # USER ID FROM MASTER (FIXED TOTAL SAFE)
+    # =========================
+    if df_master is not None:
 
-    df_master.columns = df_master.columns.str.strip()
+        df_master.columns = df_master.columns.str.strip()
 
-    # pastikan kolom benar
-    if "Kode" in df_master.columns and "ID Member" in df_master.columns:
+        df_master = df_master.rename(columns={
+            "kode": "Kode",
+            "KODE": "Kode",
+            "Kode ": "Kode"
+        })
 
-        # rapikan
-        df_master["Kode"] = df_master["Kode"].astype(str).str.strip()
-        df_master["ID Member"] = df_master["ID Member"].astype(str).str.strip()
+        if "Kode" in df_master.columns and "ID Member" in df.columns:
 
-        # bikin mapping: Kode -> ID Member
-        kode_to_user = dict(zip(df_master["Kode"], df_master["ID Member"]))
+            df["ID Member"] = df["ID Member"].astype(str).str.strip()
+            df_master["Kode"] = df_master["Kode"].astype(str).str.strip()
 
-        # apply ke df redo
-        if "ID Member" in df.columns:
-            df["User ID"] = df["ID Member"].astype(str).str.strip().map(kode_to_user)
+            mapping = dict(zip(df_master["Kode"], df_master["ID Member"]))
 
-            # fallback kalau tidak ketemu di master
-            df["User ID"] = df["User ID"].fillna(df["ID Member"])
+            df["User ID"] = df["ID Member"].map(mapping)
+
+    # fallback aman (INI YANG FIX KEYERROR KAMU)
+    if "User ID" not in df.columns:
+        df["User ID"] = pd.NA
+
+    if "ID Member" in df.columns:
+        df["User ID"] = df["User ID"].fillna(df["ID Member"])
 
     # =========================
-    # FINAL CLEAN
+    # FINAL CLEAN DATE
     # =========================
     for col in ["Jadwal Selesai", "Jadwal/Janji Kirim"]:
         if col in df.columns:
