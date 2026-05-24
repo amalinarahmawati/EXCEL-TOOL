@@ -114,13 +114,14 @@ def proses_redo(df, df_master):
     # =========================
     if "Nomor" in df.columns:
 
-        df["Nomor"] = df["Nomor"].astype(str).apply(
-            lambda x: re.sub(r"\bK\b", "Konfirmasi", re.sub(r"\s+", " ", x)).strip()
+    df["Nomor"] = df["Nomor"].apply(
+        lambda x: (
+            re.sub(r"\bK\b", "Konfirmasi",
+                   re.sub(r"\s+", " ", str(x))
+            ).strip()
+            if pd.notna(x) else x
         )
-
-        mask_konfirmasi = df["Nomor"].str.contains("Konfirmasi", case=False, na=False)
-
-        df.loc[mask_konfirmasi, ["Jadwal/Janji Kirim", "Jadwal Selesai"]] = pd.NaT
+    )
 
     # =========================
     # ===== MASTER MERGE =====
