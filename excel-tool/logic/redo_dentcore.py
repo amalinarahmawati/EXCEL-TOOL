@@ -65,7 +65,7 @@ def next_working_day(t):
 # =========================
 # MAIN PROCESS
 # =========================
-def proses_redo(df, df_master=None):
+def proses_redo_dentcore(df, df_master=None):
 
     df = df.copy()
     df.columns = df.columns.str.strip()
