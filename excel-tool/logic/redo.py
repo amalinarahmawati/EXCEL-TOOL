@@ -1,18 +1,23 @@
 import pandas as pd
 import numpy as np
-import re
 from datetime import timedelta
 
+# =========================
+# HOLIDAY
+# =========================
 TANGGAL_MERAH = pd.to_datetime([
-    "2026-01-01", "2026-01-16", "2026-02-17",
-    "2026-03-19", "2026-03-21", "2026-03-22",
-    "2026-04-03", "2026-05-01", "2026-05-14",
-    "2026-05-27", "2026-05-31", "2026-06-01",
-    "2026-06-16", "2026-08-17", "2026-08-25",
+    "2026-01-01","2026-01-16","2026-02-17",
+    "2026-03-19","2026-03-21","2026-03-22",
+    "2026-04-03","2026-05-01","2026-05-14",
+    "2026-05-27","2026-05-31","2026-06-01",
+    "2026-06-16","2026-08-17","2026-08-25",
     "2026-12-25"
 ]).normalize()
 
 
+# =========================
+# SAFE TEXT
+# =========================
 def safe_text(x):
     if pd.isna(x):
         return pd.NA
@@ -20,29 +25,18 @@ def safe_text(x):
 
 
 # =========================
-# 🔥 FINAL SAFE EXCEL DATETIME FIX
+# SAFE DATETIME (ANTI 1970)
 # =========================
 def fix_excel_datetime(series):
-    """
-    FIX TOTAL:
-    - handle float Excel serial
-    - handle weird 0.000046146 (shift error)
-    - handle string datetime
-    - prevent 1970 fallback error
-    """
 
-    # sudah datetime
     if pd.api.types.is_datetime64_any_dtype(series):
         return series
 
     s = pd.to_numeric(series, errors="coerce")
 
-    # 🔥 FIX BUG FLOAT KECIL (0.000046146 dll)
-    # kalau < 1 tapi bukan NaN → kemungkinan shift Excel error
     mask_small = (s > 0) & (s < 1000)
-    s.loc[mask_small] = s.loc[mask_small] * 100000  # normalize corruption
+    s.loc[mask_small] = s.loc[mask_small] * 100000
 
-    # Excel serial valid range (biar gak noise)
     s = s.where((s > 20000) & (s < 80000))
 
     return pd.to_datetime(
@@ -54,56 +48,67 @@ def fix_excel_datetime(series):
 
 
 # =========================
+# NEXT WORKING DAY
+# =========================
+def next_working_day(t):
+    if pd.isna(t):
+        return pd.NaT
+
+    t = t + timedelta(days=1)
+
+    while t.weekday() == 6 or t.normalize() in TANGGAL_MERAH:
+        t = t + timedelta(days=1)
+
+    return t
+
+
+# =========================
 # MAIN PROCESS
 # =========================
-def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
+def proses_redo(df, df_master=None):
 
     df = df.copy()
-    df_master = df_master.copy() if df_master is not None else None
-
     df.columns = df.columns.str.strip()
 
     # =========================
     # CUT TOTAL
     # =========================
-    idx_total = df[
+    idx = df[
         df.astype(str).apply(
-            lambda row: row.str.contains("TOTAL", case=False, na=False).any(),
+            lambda r: r.str.contains("TOTAL", case=False, na=False).any(),
             axis=1
         )
     ].index
 
-    if len(idx_total) > 0:
-        df = df.loc[:idx_total[0] - 1].copy()
+    if len(idx) > 0:
+        df = df.loc[:idx[0] - 1].copy()
 
     # =========================
-    # TANGGAL (SAFE)
+    # TANGGAL
     # =========================
     if "Tanggal" in df.columns:
-        df["Tanggal"] = fix_excel_datetime(df["Tanggal"])
-        df["Tanggal"] = df["Tanggal"].ffill()
+        df["Tanggal"] = fix_excel_datetime(df["Tanggal"]).ffill()
 
     # =========================
-    # DROP
+    # DROP KOLOM
     # =========================
     drop_cols = [
-        "No Reservasi", "Pembuat", "Customer", "Kota",
-        "Proses Order", "Jam Terima Order", "Jam Selesai",
-        "Jadwal Delivery", "Cito", "Ketr Cito",
-        "No Order Lanjutan", "Personalia",
-        "Melanjutkan Jadwal Order", "No Resi Pengiriman",
+        "No Reservasi","Pembuat","Customer","Kota",
+        "Proses Order","Jam Terima Order","Jam Selesai",
+        "Jadwal Delivery","Cito","Ketr Cito",
+        "No Order Lanjutan","Personalia",
+        "Melanjutkan Jadwal Order","No Resi Pengiriman",
         "Alasan Redo"
     ]
+
     df = df.drop(columns=drop_cols, errors="ignore")
 
     # =========================
-    # DATE FIX (NO DOUBLE CONVERT)
+    # DATE FIX
     # =========================
     for col in ["Jadwal Selesai", "Jadwal/Janji Kirim"]:
-
         if col in df.columns:
-            if not pd.api.types.is_datetime64_any_dtype(df[col]):
-                df[col] = fix_excel_datetime(df[col])
+            df[col] = fix_excel_datetime(df[col])
 
     # =========================
     # NEXT WORKING DAY
@@ -126,7 +131,9 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
 
         mask = df["Jadwal/Janji Kirim"].isna()
 
-        df.loc[mask, "Jadwal/Janji Kirim"] = df.loc[mask, "Jadwal Selesai"].apply(next_working_day)
+        df.loc[mask, "Jadwal/Janji Kirim"] = df.loc[
+            mask, "Jadwal Selesai"
+        ].apply(next_working_day)
 
         df["Jadwal Selesai"] = df["Jadwal/Janji Kirim"]
 
@@ -143,22 +150,27 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
     # NOMOR CLEAN
     # =========================
     if "Nomor" in df.columns:
-
         df["Nomor"] = df["Nomor"].apply(safe_text)
         df["Nomor"] = df["Nomor"].str.replace(r"\s+", " ", regex=True)
         df["Nomor"] = df["Nomor"].str.replace(r"\bK\b", "Konfirmasi", regex=True)
 
         mask_konfirmasi = df["Nomor"].str.contains("Konfirmasi", na=False)
 
-        df.loc[mask_konfirmasi, "Jadwal/Janji Kirim"] = pd.NaT
-        df.loc[mask_konfirmasi, "Jadwal Selesai"] = pd.NaT
+        df.loc[mask_konfirmasi, ["Jadwal Selesai", "Jadwal/Janji Kirim"]] = pd.NaT
 
     # =========================
-    # USER ID SAFE
+    # USER ID SAFE (SAMAIN DENGAN CABUT PENDING)
     # =========================
-    if df_master is not None and "ID Member" in df.columns:
+    if df_master is not None:
 
+        df_master = df_master.copy()
         df_master.columns = df_master.columns.str.strip()
+
+        df_master = df_master.rename(columns={
+            "kode": "Kode",
+            "KODE": "Kode",
+            "Kode ": "Kode"
+        })
 
         if "Kode" in df_master.columns and "ID Member" in df_master.columns:
 
@@ -169,8 +181,17 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
 
             df["User ID"] = df["ID Member"].astype(str).str.strip().map(mapping)
 
+    # fallback aman
     if "User ID" not in df.columns:
-        df["User ID"] = pd.NA
+        df["User ID"] = df.get("ID Member", pd.NA)
+
+    # CLEAN USER ID
+    df["User ID"] = (
+        df["User ID"]
+        .astype(str)
+        .replace({"nan": pd.NA, "None": pd.NA, "-": pd.NA, "": pd.NA})
+        .str.strip()
+    )
 
     if "ID Member" in df.columns:
         df["User ID"] = df["User ID"].fillna(df["ID Member"])
