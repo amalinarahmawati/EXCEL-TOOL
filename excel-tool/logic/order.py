@@ -4,152 +4,114 @@ import re
 from datetime import timedelta
 
 
+# =========================
+# HOLIDAY
+# =========================
+tanggal_merah = pd.to_datetime([
+    "2026-01-01","2026-01-16","2026-02-17",
+    "2026-03-19","2026-03-21","2026-03-22",
+    "2026-04-03","2026-05-01","2026-05-14",
+    "2026-05-27","2026-05-31","2026-06-01",
+    "2026-06-16","2026-08-17","2026-08-25",
+    "2026-12-25"
+]).normalize()
+
+
+# =========================
+# SAFE DATETIME
+# =========================
+def safe_datetime(series):
+    return pd.to_datetime(series, errors="coerce")
+
+
+# =========================
+# NEXT WORKDAY
+# =========================
+def next_working_day(t):
+    if pd.isna(t):
+        return pd.NaT
+
+    t = t + timedelta(days=1)
+
+    while t.weekday() == 6 or t.normalize() in tanggal_merah:
+        t = t + timedelta(days=1)
+
+    return t
+
+
+# =========================
+# MAIN FUNCTION (FIXED)
+# =========================
 def proses_order(df):
 
-    # =========================
-    # CLEAN COLUMN NAME
-    # =========================
+    df = df.copy()
     df.columns = df.columns.str.strip()
 
     # =========================
-    # HAPUS BARIS DARI TOTAL KE BAWAH
+    # CUT TOTAL
     # =========================
     idx_total = df[
         df.astype(str).apply(
-            lambda row: row.astype(str).str.contains(
-                "TOTAL",
-                case=False,
-                na=False
-            ).any(),
+            lambda r: r.str.contains("TOTAL", case=False, na=False).any(),
             axis=1
         )
     ].index
 
     if len(idx_total) > 0:
-        baris_total = idx_total[0]
-        df = df.loc[:baris_total - 1]
+        df = df.loc[:idx_total[0] - 1].copy()
 
     # =========================
-    # ISI TANGGAL KE BAWAH
+    # TANGGAL SAFE (IMPORTANT FIX)
     # =========================
     if "Tanggal" in df.columns:
-        df["Tanggal"] = df["Tanggal"].ffill()
+        df["Tanggal"] = safe_datetime(df["Tanggal"]).ffill()
 
     # =========================
-    # HAPUS KOLOM INDEX 17 (R column)
+    # DROP COLUMN INDEX 17 SAFER
     # =========================
     if len(df.columns) > 17:
         df = df.drop(df.columns[17], axis=1)
 
     # =========================
-    # HAPUS KOLOM TIDAK DIPAKAI
+    # DROP UNUSED COLS
     # =========================
     hapus_kolom = [
-        "No Reservasi",
-        "Pembuat",
-        "Customer",
-        "Kota",
-        "Tanggal Ekspedisi",
-        "Jam Ekspedisi",
-        "Selisih Terima dan Input",
-        "Proses Order",
-        "Ekstensi Garansi",
-        "Biaya Garansi",
-        "Jam Terima Order",
-        "Jam Selesai",
-        "Jadwal Delivery",
-        "Cito",
-        "Ketr Cito",
-        "No Order Lanjutan",
-        "No Resi"
+        "No Reservasi","Pembuat","Customer","Kota",
+        "Tanggal Ekspedisi","Jam Ekspedisi",
+        "Selisih Terima dan Input","Proses Order",
+        "Ekstensi Garansi","Biaya Garansi",
+        "Jam Terima Order","Jam Selesai",
+        "Jadwal Delivery","Cito","Ketr Cito",
+        "No Order Lanjutan","No Resi"
     ]
 
-    df = df.drop(
-        columns=[col for col in hapus_kolom if col in df.columns],
-        errors="ignore"
-    )
+    df = df.drop(columns=hapus_kolom, errors="ignore")
 
     # =========================
-    # JADWAL OTOMATIS
+    # DATE FIX (CRITICAL FIX)
     # =========================
-    tanggal_merah = pd.to_datetime([
-        "2026-01-01",
-        "2026-01-16",
-        "2026-02-17",
-        "2026-03-19",
-        "2026-03-21",
-        "2026-03-22",
-        "2026-04-03",
-        "2026-05-01",
-        "2026-05-14",
-        "2026-05-27",
-        "2026-05-31",
-        "2026-06-01",
-        "2026-06-16",
-        "2026-08-17",
-        "2026-08-25",
-        "2026-12-25"
-    ])
+    for col in ["Jadwal Selesai", "Jadwal/Janji Kirim"]:
+        if col in df.columns:
+            df[col] = safe_datetime(df[col])
 
-    def next_working_day(tanggal):
-        if pd.isna(tanggal):
-            return pd.NaT
-
-        tanggal = pd.to_datetime(tanggal, errors="coerce")
-
-        if pd.isna(tanggal):
-            return pd.NaT
-
-        tanggal = tanggal + timedelta(days=1)
-
-        while (
-            tanggal.weekday() == 6
-            or tanggal.normalize() in tanggal_merah
-        ):
-            tanggal = tanggal + timedelta(days=1)
-
-        return tanggal
-
-    if "Jadwal Selesai" in df.columns:
-        df["Jadwal Selesai"] = pd.to_datetime(
-            df["Jadwal Selesai"],
-            errors="coerce"
-        )
-
-    if "Jadwal/Janji Kirim" in df.columns:
-        df["Jadwal/Janji Kirim"] = pd.to_datetime(
-            df["Jadwal/Janji Kirim"],
-            errors="coerce"
-        )
+    # =========================
+    # AUTO JADWAL
+    # =========================
+    if "Jadwal Selesai" in df.columns and "Jadwal/Janji Kirim" in df.columns:
 
         mask = df["Jadwal/Janji Kirim"].isna()
 
-        df.loc[
-            mask,
-            "Jadwal/Janji Kirim"
-        ] = df.loc[
-            mask,
-            "Jadwal Selesai"
-        ].apply(next_working_day)
+        df.loc[mask, "Jadwal/Janji Kirim"] = (
+            df.loc[mask, "Jadwal Selesai"].apply(next_working_day)
+        )
 
-    # =========================
-    # COPY JADWAL
-    # =========================
-    if (
-        "Jadwal/Janji Kirim" in df.columns
-        and "Jadwal Selesai" in df.columns
-    ):
+        # copy hasil
         df["Jadwal Selesai"] = df["Jadwal/Janji Kirim"]
 
-
     # =========================
-    # HAPUS PRODUK TERTENTU
+    # PRODUK FILTER
     # =========================
-    produk_hapus = [
-        "22 COR MODEL STONE",
-        "22 COR TYPE III"
-    ]
-
+    produk_hapus = ["22 COR MODEL STONE","22 COR TYPE III"]
     pattern = "|".join(produk_hapus)
 
     if "Produk Gigi / Tambahan" in df.columns:
@@ -161,129 +123,54 @@ def proses_order(df):
         ]
 
     # =========================
-    # FIX NOMOR
+    # NOMOR CLEAN
     # =========================
     if "Nomor" in df.columns:
 
-        def fix_nomor(x):
-            if pd.isna(x):
-                return x
-
-            x = str(x)
-            x = re.sub(r"\bK\b", "Konfirmasi", x)
-            x = re.sub(r"\s+", " ", x).strip()
-
-            return x
-
-        df["Nomor"] = df["Nomor"].apply(fix_nomor)
-
-    # =========================
-    # KONFIRMASI = JADWAL KOSONG
-    # =========================
-    if "Nomor" in df.columns:
-
-        mask_konfirmasi = df["Nomor"].astype(str).str.contains(
-            "Konfirmasi",
-            case=False,
-            na=False
-        )
-
-        if "Jadwal/Janji Kirim" in df.columns:
-            df.loc[
-                mask_konfirmasi,
-                "Jadwal/Janji Kirim"
-            ] = pd.NaT
-
-        if "Jadwal Selesai" in df.columns:
-            df.loc[
-                mask_konfirmasi,
-                "Jadwal Selesai"
-            ] = pd.NaT
-
-        # =========================
-    # USER ID CLEAN (FIX TOTAL)
-    # =========================
-    if "User ID" in df.columns:
-
-        df["User ID"] = (
-            df["User ID"]
+        df["Nomor"] = (
+            df["Nomor"]
             .astype(str)
+            .str.replace(r"\bK\b","Konfirmasi",regex=True)
+            .str.replace(r"\s+"," ",regex=True)
             .str.strip()
-            .replace({
-                "nan": pd.NA,
-                "None": pd.NA,
-                "none": pd.NA,
-                "": pd.NA,
-                "-": pd.NA,
-                "–": pd.NA,
-                "—": pd.NA,
-                " - ": pd.NA
-            })
         )
 
-    if "ID Member" in df.columns:
+        mask_konfirmasi = df["Nomor"].str.contains("Konfirmasi", na=False)
 
-        df["ID Member"] = (
-            df["ID Member"]
-            .astype(str)
-            .str.strip()
-            .replace({
-                "nan": pd.NA,
-                "None": pd.NA,
-                "none": pd.NA,
-                "": pd.NA,
-                "-": pd.NA,
-                "–": pd.NA,
-                "—": pd.NA,
-                " - ": pd.NA
-            })
-        )
+        df.loc[mask_konfirmasi, ["Jadwal/Janji Kirim","Jadwal Selesai"]] = pd.NaT
 
-    # isi User ID dari ID Member (SAFE)
+    # =========================
+    # USER ID CLEAN
+    # =========================
+    for col in ["User ID","ID Member"]:
+        if col in df.columns:
+            df[col] = (
+                df[col]
+                .astype(str)
+                .replace({"nan":pd.NA,"None":pd.NA,"-":pd.NA,"":pd.NA})
+                .str.strip()
+            )
+
+    # fill user id
     if "User ID" in df.columns and "ID Member" in df.columns:
         df["User ID"] = df["User ID"].fillna(df["ID Member"])
 
-    # FINAL SAFETY CLEAN
-    if "User ID" in df.columns:
-        df["User ID"] = df["User ID"].replace(["-", "–", "—"], pd.NA)
-
     # =========================
-    # DUPLICATE LOGIC FIX
+    # DUPLICATE LOGIC (SAFE VERSION)
     # =========================
-    if (
-        "User ID" in df.columns
-        and "ID Member" in df.columns
-    ):
+    if "User ID" in df.columns and "ID Member" in df.columns:
 
-        result = []
+        special = df["ID Member"].astype(str).str.count("-") == 2
 
-        for _, row in df.iterrows():
+        extra_rows = df[special & (df["User ID"] != df["ID Member"])].copy()
+        extra_rows["User ID"] = extra_rows["ID Member"]
 
-            user_id = row.get("User ID")
-            id_member = str(row.get("ID Member", ""))
-
-            is_special_id = (
-                id_member.count("-") == 2
-                and id_member != "nan"
-            )
-
-            result.append(row.copy())
-
-            if (
-                pd.notna(user_id)
-                and is_special_id
-                and user_id != id_member
-            ):
-                new_row = row.copy()
-                new_row["User ID"] = id_member
-                result.append(new_row)
-
-        df = pd.DataFrame(result)
+        df = pd.concat([df, extra_rows], ignore_index=True)
 
         df = df.drop(columns=["ID Member"], errors="ignore")
 
     # =========================
-    # POSISI KOLOM PASIEN
+    # POSISI KOLOM
     # =========================
     cols = list(df.columns)
 
@@ -292,27 +179,10 @@ def proses_order(df):
         cols.insert(cols.index("User ID"), "Pasien")
         df = df[cols]
 
-    # =========================
-    # DOKTER KE AKHIR
-    # =========================
     if "Dokter" in df.columns:
         cols = list(df.columns)
         cols.remove("Dokter")
         cols.append("Dokter")
         df = df[cols]
-
-    # =========================
-    # OPTIONAL: TAMPILKAN "-"
-    # DI OUTPUT EXCEL
-    # =========================
-    if "Jadwal/Janji Kirim" in df.columns:
-        df["Jadwal/Janji Kirim"] = df[
-            "Jadwal/Janji Kirim"
-        ].fillna("-")
-
-    if "Jadwal Selesai" in df.columns:
-        df["Jadwal Selesai"] = df[
-            "Jadwal Selesai"
-        ].fillna("-")
 
     return df
