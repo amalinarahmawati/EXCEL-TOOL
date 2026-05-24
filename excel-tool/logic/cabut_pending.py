@@ -43,7 +43,7 @@ def next_working_day(t):
 
 
 # =========================
-# MAIN FUNCTION (FIXED)
+# MAIN FUNCTION (FIXED = REDO STYLE USER ID)
 # =========================
 def proses_cabut_pending(df, df_master=None):
 
@@ -70,9 +70,9 @@ def proses_cabut_pending(df, df_master=None):
         df["Tanggal"] = safe_date(df["Tanggal"]).ffill()
 
     # =========================
-    # DROP KOLOM (User ID dihapus dulu)
+    # DROP KOLOM (TIDAK DROP USER ID DULU)
     # =========================
-    df = df.drop(columns=["Waktu Cabut", "Customer", "User ID"], errors="ignore")
+    df = df.drop(columns=["Waktu Cabut", "Customer"], errors="ignore")
 
     # =========================
     # JADWAL FIX
@@ -109,11 +109,12 @@ def proses_cabut_pending(df, df_master=None):
         df.loc[mask_konfirmasi, ["Jadwal Selesai", "Janji Kirim"]] = pd.NaT
 
     # =========================
-    # USER ID REBUILD (MASTER PRIORITY)
+    # 🔥 USER ID (SAMA PERSIS LOGIC REDO)
     # =========================
-    if df_master is not None:
+    df_master = df_master.copy() if df_master is not None else None
 
-        df_master = df_master.copy()
+    if df_master is not None and "ID Member" in df.columns:
+
         df_master.columns = df_master.columns.str.strip()
 
         if "Kode" in df_master.columns and "ID Member" in df_master.columns:
@@ -123,29 +124,27 @@ def proses_cabut_pending(df, df_master=None):
                 df_master["ID Member"].astype(str).str.strip()
             ))
 
-            if "ID Member" in df.columns:
-                df["User ID"] = df["ID Member"].astype(str).str.strip().map(mapping)
-            else:
-                df["User ID"] = pd.NA
+            df["User ID"] = df["ID Member"].astype(str).str.strip().map(mapping)
 
-    # fallback kalau master tidak ada
+    # fallback seperti redo
     if "User ID" not in df.columns:
-        if "ID Member" in df.columns:
-            df["User ID"] = df["ID Member"]
-        else:
-            df["User ID"] = pd.NA
+        df["User ID"] = pd.NA
 
-    # cleanup
+    if "ID Member" in df.columns:
+        df["User ID"] = df["User ID"].fillna(df["ID Member"])
+
+    # clean (SAMA REDO)
     df["User ID"] = (
         df["User ID"]
         .astype(str)
-        .replace({"nan": pd.NA, "None": pd.NA, "-": pd.NA, "": pd.NA})
+        .replace({
+            "nan": pd.NA,
+            "None": pd.NA,
+            "-": pd.NA,
+            "": pd.NA
+        })
         .str.strip()
     )
-
-    # fill fallback
-    if "ID Member" in df.columns:
-        df["User ID"] = df["User ID"].fillna(df["ID Member"])
 
     # =========================
     # POSISI KOLOM (SAMA REDO STYLE)
@@ -157,8 +156,7 @@ def proses_cabut_pending(df, df_master=None):
         cols.insert(cols.index("User ID"), "Pasien")
         df = df[cols]
 
-    if "Dokter" in df.columns:
-        cols = list(df.columns)
+    if "Dokter" in cols:
         cols.remove("Dokter")
         cols.append("Dokter")
         df = df[cols]
