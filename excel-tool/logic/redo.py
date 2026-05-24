@@ -17,12 +17,19 @@ TANGGAL_MERAH = pd.to_datetime([
 
 
 # =========================
+# SAFE DATETIME (ANTI 1970 FIX)
+# =========================
+def safe_datetime(col):
+    return pd.to_datetime(col, errors="coerce")
+
+
+# =========================
 # MAIN FUNCTION
 # =========================
 def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame):
 
     df = df.copy()
-    df_master = df_master.copy()
+    df_master = df_master.copy() if df_master is not None else None
 
     # =========================
     # CLEAN COLUMN
@@ -43,9 +50,10 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame):
         df = df.loc[:idx_total[0] - 1]
 
     # =========================
-    # FILL TANGGAL
+    # FILL TANGGAL (SAFE)
     # =========================
     if "Tanggal" in df.columns:
+        df["Tanggal"] = pd.to_datetime(df["Tanggal"], errors="coerce")
         df["Tanggal"] = df["Tanggal"].ffill()
 
     # =========================
@@ -63,13 +71,13 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame):
     df = df.drop(columns=hapus_kolom, errors="ignore")
 
     # =========================
-    # DATE CONVERSION
+    # DATE FIX (INI YANG NGHILANGIN 1970)
     # =========================
     if "Jadwal Selesai" in df.columns:
-        df["Jadwal Selesai"] = pd.to_datetime(df["Jadwal Selesai"], errors="coerce")
+        df["Jadwal Selesai"] = safe_datetime(df["Jadwal Selesai"])
 
     if "Jadwal/Janji Kirim" in df.columns:
-        df["Jadwal/Janji Kirim"] = pd.to_datetime(df["Jadwal/Janji Kirim"], errors="coerce")
+        df["Jadwal/Janji Kirim"] = safe_datetime(df["Jadwal/Janji Kirim"])
 
     # =========================
     # NEXT WORKING DAY
@@ -80,17 +88,23 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame):
 
         tanggal = tanggal + timedelta(days=1)
 
-        while tanggal.weekday() == 6 or tanggal in TANGGAL_MERAH:
+        while tanggal.weekday() == 6 or tanggal.normalize() in TANGGAL_MERAH:
             tanggal = tanggal + timedelta(days=1)
 
         return tanggal
 
-    if "Jadwal/Janji Kirim" in df.columns and "Jadwal Selesai" in df.columns:
-        mask = df["Jadwal/Janji Kirim"].isna()
-        df.loc[mask, "Jadwal/Janji Kirim"] = df.loc[mask, "Jadwal Selesai"].apply(next_working_day)
+    # =========================
+    # AUTO FILL JADWAL
+    # =========================
+    if "Jadwal Selesai" in df.columns and "Jadwal/Janji Kirim" in df.columns:
 
-    # copy ke jadwal selesai
-    if "Jadwal/Janji Kirim" in df.columns:
+        mask = df["Jadwal/Janji Kirim"].isna()
+
+        df.loc[mask, "Jadwal/Janji Kirim"] = df.loc[mask, "Jadwal Selesai"].apply(
+            next_working_day
+        )
+
+        # COPY tanpa convert ke string "-"
         df["Jadwal Selesai"] = df["Jadwal/Janji Kirim"]
 
     # =========================
@@ -103,39 +117,37 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame):
         df = df[~df["Produk Gigi"].astype(str).str.upper().str.contains(pattern, na=False)]
 
     # =========================
-    # FIX KOLOM NOMOR
+    # FIX NOMOR
     # =========================
     if "Nomor" in df.columns:
-
         df["Nomor"] = df["Nomor"].astype(str).apply(
-            lambda x: re.sub(r'\bK\b', 'Konfirmasi', re.sub(r'\s+', ' ', x)).strip()
+            lambda x: re.sub(r'\bK\b', 'Konfirmasi',
+                    re.sub(r'\s+', ' ', x)).strip()
         )
 
         mask_konfirmasi = df["Nomor"].str.contains("Konfirmasi", case=False, na=False)
 
+        # IMPORTANT: pakai NaT (BUKAN "-")
         if "Jadwal/Janji Kirim" in df.columns:
-            df.loc[mask_konfirmasi, "Jadwal/Janji Kirim"] = "-"
+            df.loc[mask_konfirmasi, "Jadwal/Janji Kirim"] = pd.NaT
 
         if "Jadwal Selesai" in df.columns:
-            df.loc[mask_konfirmasi, "Jadwal Selesai"] = "-"
+            df.loc[mask_konfirmasi, "Jadwal Selesai"] = pd.NaT
 
     # =========================
+    # USER ID FROM MASTER (FIXED TOTAL SAFE)
     # =========================
-    # USER ID FROM MASTER (FIXED & CLEAN)
-    # =========================
-    if df_master is not None:
+    if df_master is not None and "ID Member" in df.columns:
 
         df_master.columns = df_master.columns.str.strip()
 
-        # normalisasi nama kolom master
         df_master = df_master.rename(columns={
             "kode": "Kode",
             "KODE": "Kode",
             "Kode ": "Kode"
         })
 
-        # pastikan kolom ada
-        if "Kode" in df_master.columns and "ID Member" in df.columns:
+        if "Kode" in df_master.columns:
 
             df["ID Member"] = df["ID Member"].astype(str).str.strip()
             df_master["Kode"] = df_master["Kode"].astype(str).str.strip()
@@ -151,24 +163,34 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame):
 
             df.drop(columns=["Kode", "ID Member_y"], inplace=True, errors="ignore")
 
-            # isi kosong
+            # fallback aman
             df["User ID"] = df["User ID"].replace(["nan", "", "None", "-", " "], pd.NA)
             df["User ID"] = df["User ID"].fillna(df["ID Member"])
 
-            # posisi kolom
-            if "User ID" in df.columns and "ID Member" in df.columns:
-                cols = list(df.columns)
-                cols.remove("User ID")
-                cols.insert(cols.index("ID Member") + 1, "User ID")
-                df = df[cols]
+    # =========================
+    # FINAL CLEAN (ANTI ERROR TYPE)
+    # =========================
+    for col in ["Jadwal Selesai", "Jadwal/Janji Kirim"]:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors="coerce")
 
     # =========================
-    # FINAL CLEAN
+    # POSISI PASIEN
     # =========================
-    if "Pasien" in df.columns and "User ID" in df.columns:
-        cols = list(df.columns)
+    cols = list(df.columns)
+
+    if "Pasien" in cols and "User ID" in cols:
         cols.remove("Pasien")
         cols.insert(cols.index("User ID"), "Pasien")
+        df = df[cols]
+
+    # =========================
+    # DOKTER KE AKHIR
+    # =========================
+    if "Dokter" in df.columns:
+        cols = list(df.columns)
+        cols.remove("Dokter")
+        cols.append("Dokter")
         df = df[cols]
 
     return df
