@@ -218,52 +218,52 @@ def proses_order(df):
                 "Jadwal Selesai"
             ] = pd.NaT
 
+        # =========================
+    # USER ID CLEAN (FIX TOTAL)
     # =========================
-# USER ID CLEAN (FIX TOTAL)
-# =========================
-if "User ID" in df.columns:
+    if "User ID" in df.columns:
 
-    df["User ID"] = (
-        df["User ID"]
-        .astype(str)
-        .str.strip()
-        .replace({
-            "nan": pd.NA,
-            "None": pd.NA,
-            "none": pd.NA,
-            "": pd.NA,
-            "-": pd.NA,
-            "–": pd.NA,
-            "—": pd.NA,
-            " - ": pd.NA
-        })
-    )
+        df["User ID"] = (
+            df["User ID"]
+            .astype(str)
+            .str.strip()
+            .replace({
+                "nan": pd.NA,
+                "None": pd.NA,
+                "none": pd.NA,
+                "": pd.NA,
+                "-": pd.NA,
+                "–": pd.NA,
+                "—": pd.NA,
+                " - ": pd.NA
+            })
+        )
 
-if "ID Member" in df.columns:
+    if "ID Member" in df.columns:
 
-    df["ID Member"] = (
-        df["ID Member"]
-        .astype(str)
-        .str.strip()
-        .replace({
-            "nan": pd.NA,
-            "None": pd.NA,
-            "none": pd.NA,
-            "": pd.NA,
-            "-": pd.NA,
-            "–": pd.NA,
-            "—": pd.NA,
-            " - ": pd.NA
-        })
-    )
+        df["ID Member"] = (
+            df["ID Member"]
+            .astype(str)
+            .str.strip()
+            .replace({
+                "nan": pd.NA,
+                "None": pd.NA,
+                "none": pd.NA,
+                "": pd.NA,
+                "-": pd.NA,
+                "–": pd.NA,
+                "—": pd.NA,
+                " - ": pd.NA
+            })
+        )
 
-# isi User ID dari ID Member (SAFE)
-if "User ID" in df.columns and "ID Member" in df.columns:
-    df["User ID"] = df["User ID"].fillna(df["ID Member"])
+    # isi User ID dari ID Member (SAFE)
+    if "User ID" in df.columns and "ID Member" in df.columns:
+        df["User ID"] = df["User ID"].fillna(df["ID Member"])
 
-# FINAL SAFETY CLEAN (WAJIB DI DALAM FUNCTION)
-if "User ID" in df.columns:
-    df["User ID"] = df["User ID"].replace(["-", "–", "—"], pd.NA)
+    # FINAL SAFETY CLEAN
+    if "User ID" in df.columns:
+        df["User ID"] = df["User ID"].replace(["-", "–", "—"], pd.NA)
 
     # =========================
     # DUPLICATE LOGIC FIX
@@ -285,10 +285,8 @@ if "User ID" in df.columns:
                 and id_member != "nan"
             )
 
-            # simpan row utama
             result.append(row.copy())
 
-            # duplicate hanya jika perlu
             if (
                 pd.notna(user_id)
                 and is_special_id
@@ -300,11 +298,7 @@ if "User ID" in df.columns:
 
         df = pd.DataFrame(result)
 
-        # hapus ID Member
-        df = df.drop(
-            columns=["ID Member"],
-            errors="ignore"
-        )
+        df = df.drop(columns=["ID Member"], errors="ignore")
 
     # =========================
     # OPTIONAL: TAMPILKAN "-"
