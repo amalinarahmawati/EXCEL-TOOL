@@ -146,35 +146,27 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame):
             df.loc[mask_konfirmasi, "Jadwal Selesai"] = pd.NaT
 
     # =========================
-    # USER ID MASTER
-    # =========================
-    if df_master is not None and "ID Member" in df.columns:
+# USER ID FROM MASTER (FIX CLEAN & SAFE)
+# =========================
+if df_master is not None:
 
-        df_master.columns = df_master.columns.str.strip()
+    df_master.columns = df_master.columns.str.strip()
 
-        df_master = df_master.rename(columns={
-            "kode": "Kode",
-            "KODE": "Kode",
-            "Kode ": "Kode"
-        })
+    # pastikan kolom benar
+    if "Kode" in df_master.columns and "ID Member" in df_master.columns:
 
-        if "Kode" in df_master.columns:
+        # rapikan
+        df_master["Kode"] = df_master["Kode"].astype(str).str.strip()
+        df_master["ID Member"] = df_master["ID Member"].astype(str).str.strip()
 
-            df["ID Member"] = df["ID Member"].astype(str).str.strip()
-            df_master["Kode"] = df_master["Kode"].astype(str).str.strip()
+        # bikin mapping: Kode -> ID Member
+        kode_to_user = dict(zip(df_master["Kode"], df_master["ID Member"]))
 
-            df = df.merge(
-                df_master[["Kode", "ID Member"]],
-                left_on="ID Member",
-                right_on="Kode",
-                how="left"
-            )
+        # apply ke df redo
+        if "ID Member" in df.columns:
+            df["User ID"] = df["ID Member"].astype(str).str.strip().map(kode_to_user)
 
-            df["User ID"] = df["ID Member_y"]
-
-            df.drop(columns=["Kode", "ID Member_y"], inplace=True, errors="ignore")
-
-            df["User ID"] = df["User ID"].replace(["nan", "", "None", "-", " "], pd.NA)
+            # fallback kalau tidak ketemu di master
             df["User ID"] = df["User ID"].fillna(df["ID Member"])
 
     # =========================
