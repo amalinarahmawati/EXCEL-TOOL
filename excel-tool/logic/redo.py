@@ -4,19 +4,6 @@ import re
 from datetime import timedelta
 
 
-# =========================
-# HOLIDAY LIST
-# =========================
-tanggal_merah = pd.to_datetime([
-    "2026-01-01", "2026-01-16", "2026-02-17",
-    "2026-03-19", "2026-03-21", "2026-03-22",
-    "2026-04-03", "2026-05-01", "2026-05-14",
-    "2026-05-27", "2026-05-31", "2026-06-01",
-    "2026-06-16", "2026-08-17", "2026-08-25",
-    "2026-12-25"
-])
-
-
 def next_working_day(tanggal):
     if pd.isna(tanggal):
         return pd.NaT
@@ -84,18 +71,76 @@ def proses_redo(df, df_master):
 
     df = df.drop(columns=[c for c in hapus_kolom if c in df.columns], errors="ignore")
 
+     # =========================
+    # JADWAL OTOMATIS
     # =========================
-    # DATE LOGIC
-    # =========================
+    tanggal_merah = pd.to_datetime([
+        "2026-01-01",
+        "2026-01-16",
+        "2026-02-17",
+        "2026-03-19",
+        "2026-03-21",
+        "2026-03-22",
+        "2026-04-03",
+        "2026-05-01",
+        "2026-05-14",
+        "2026-05-27",
+        "2026-05-31",
+        "2026-06-01",
+        "2026-06-16",
+        "2026-08-17",
+        "2026-08-25",
+        "2026-12-25"
+    ])
+
+    def next_working_day(tanggal):
+        if pd.isna(tanggal):
+            return pd.NaT
+
+        tanggal = pd.to_datetime(tanggal, errors="coerce")
+
+        if pd.isna(tanggal):
+            return pd.NaT
+
+        tanggal = tanggal + timedelta(days=1)
+
+        while (
+            tanggal.weekday() == 6
+            or tanggal.normalize() in tanggal_merah
+        ):
+            tanggal = tanggal + timedelta(days=1)
+
+        return tanggal
+
     if "Jadwal Selesai" in df.columns:
-        df["Jadwal Selesai"] = pd.to_datetime(df["Jadwal Selesai"], errors="coerce")
+        df["Jadwal Selesai"] = pd.to_datetime(
+            df["Jadwal Selesai"],
+            errors="coerce"
+        )
 
     if "Jadwal/Janji Kirim" in df.columns:
-        df["Jadwal/Janji Kirim"] = pd.to_datetime(df["Jadwal/Janji Kirim"], errors="coerce")
+        df["Jadwal/Janji Kirim"] = pd.to_datetime(
+            df["Jadwal/Janji Kirim"],
+            errors="coerce"
+        )
 
         mask = df["Jadwal/Janji Kirim"].isna()
-        df.loc[mask, "Jadwal/Janji Kirim"] = df.loc[mask, "Jadwal Selesai"].apply(next_working_day)
 
+        df.loc[
+            mask,
+            "Jadwal/Janji Kirim"
+        ] = df.loc[
+            mask,
+            "Jadwal Selesai"
+        ].apply(next_working_day)
+
+    # =========================
+    # COPY JADWAL
+    # =========================
+    if (
+        "Jadwal/Janji Kirim" in df.columns
+        and "Jadwal Selesai" in df.columns
+    ):
         df["Jadwal Selesai"] = df["Jadwal/Janji Kirim"]
 
     # =========================
