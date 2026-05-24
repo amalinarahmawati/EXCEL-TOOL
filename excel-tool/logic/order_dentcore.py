@@ -232,6 +232,25 @@ def proses_order_dentcore(df):
         df = df.drop(columns=["ID Member"], errors="ignore")
 
     # =========================
+    # POSISI KOLOM PASIEN
+    # =========================
+    cols = list(df.columns)
+
+    if "Pasien" in cols and "User ID" in cols:
+        cols.remove("Pasien")
+        cols.insert(cols.index("User ID"), "Pasien")
+        df = df[cols]
+
+    # =========================
+    # DOKTER KE AKHIR
+    # =========================
+    if "Dokter" in df.columns:
+        cols = list(df.columns)
+        cols.remove("Dokter")
+        cols.append("Dokter")
+        df = df[cols]
+
+    # =========================
     # OPTIONAL: TAMPILKAN "-"
     # DI OUTPUT EXCEL
     # =========================
