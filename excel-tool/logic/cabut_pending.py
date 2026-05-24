@@ -2,54 +2,42 @@ import pandas as pd
 import numpy as np
 from datetime import timedelta
 
-TANGGAL_MERAH = pd.to_datetime([
-    "2026-01-01", "2026-01-16", "2026-02-17",
-    "2026-03-19", "2026-03-21", "2026-03-22",
-    "2026-04-03", "2026-05-01", "2026-05-14",
-    "2026-05-27", "2026-05-31", "2026-06-01",
-    "2026-06-16", "2026-08-17", "2026-08-25",
+# =========================
+# HOLIDAY
+# =========================
+tanggal_merah = pd.to_datetime([
+    "2026-01-01","2026-01-16","2026-02-17",
+    "2026-03-19","2026-03-21","2026-03-22",
+    "2026-04-03","2026-05-01","2026-05-14",
+    "2026-05-27","2026-05-31","2026-06-01",
+    "2026-06-16","2026-08-17","2026-08-25",
     "2026-12-25"
 ]).normalize()
 
 
-def safe_text(x):
-    if pd.isna(x):
-        return pd.NA
-    return str(x)
-
-
 # =========================
-# 🔥 FINAL SAFE EXCEL DATETIME FIX
+# SAFE DATE (FIX TOTAL + ANTI 1970 CRASH)
 # =========================
-def fix_excel_datetime(series):
-    """
-    FIX TOTAL:
-    - handle float Excel serial
-    - handle weird 0.000046146 (shift error)
-    - handle string datetime
-    - prevent 1970 fallback error
-    """
+def safe_date(series):
+    if series is None:
+        return series
 
-    # sudah datetime
+    # kalau sudah datetime
     if pd.api.types.is_datetime64_any_dtype(series):
         return series
 
     s = pd.to_numeric(series, errors="coerce")
 
-    # 🔥 FIX BUG FLOAT KECIL (0.000046146 dll)
-    # kalau < 1 tapi bukan NaN → kemungkinan shift Excel error
-    mask_small = (s > 0) & (s < 1000)
-    s.loc[mask_small] = s.loc[mask_small] * 100000  # normalize corruption
+    # Excel serial detection
+    if s.notna().sum() > len(series) * 0.3:
+        return pd.to_datetime(
+            s,
+            unit="D",
+            origin="1899-12-30",
+            errors="coerce"
+        )
 
-    # Excel serial valid range (biar gak noise)
-    s = s.where((s > 20000) & (s < 80000))
-
-    return pd.to_datetime(
-        s,
-        unit="D",
-        origin="1899-12-30",
-        errors="coerce"
-    )
+    return pd.to_datetime(series, errors="coerce")
 
 
 # =========================
@@ -89,18 +77,18 @@ def proses_cabut_pending(df, df_master=None):
         df = df.loc[:idx_total[0] - 1].copy()
 
     # =========================
-    # TANGGAL FIX (ANTI 1970)
+    # TANGGAL SAFE (NO CRASH)
     # =========================
     if "Tanggal" in df.columns:
         df["Tanggal"] = safe_date(df["Tanggal"]).ffill()
 
     # =========================
-    # DROP USER ID LAMA (WAJIB CLEAN START)
+    # DROP USER ID AWAL (WAJIB)
     # =========================
     df = df.drop(columns=["Waktu Cabut", "Customer", "User ID"], errors="ignore")
 
     # =========================
-    # JADWAL FIX
+    # JADWAL FIX (SAFE CALL)
     # =========================
     for col in ["Jadwal Selesai", "Janji Kirim"]:
         if col in df.columns:
@@ -130,21 +118,12 @@ def proses_cabut_pending(df, df_master=None):
         )
 
         mask_konfirmasi = df["Nomor"].str.contains("Konfirmasi", na=False)
+
         df.loc[mask_konfirmasi, ["Jadwal Selesai", "Janji Kirim"]] = pd.NaT
 
     # =========================
+    # USER ID REBUILD (MASTER ONLY, DROP TOTAL OLD)
     # =========================
-    # USER ID REBUILD (FIXED 100%)
-    # =========================
-    df["ID Member"] = df.get("ID Member", pd.NA)
-
-    df["ID Member"] = (
-        df["ID Member"]
-        .astype(str)
-        .replace({"nan": pd.NA, "None": pd.NA, "-": pd.NA, "": pd.NA})
-        .str.strip()
-    )
-
     if df_master is not None:
 
         df_master = df_master.copy()
@@ -158,44 +137,57 @@ def proses_cabut_pending(df, df_master=None):
 
         if "Kode" in df_master.columns and "ID Member" in df_master.columns:
 
-            mapping = df_master.set_index("Kode")["ID Member"].astype(str).to_dict()
+            mapping = dict(zip(
+                df_master["Kode"].astype(str).str.strip(),
+                df_master["ID Member"].astype(str).str.strip()
+            ))
 
-            # 🔥 REBUILD TOTAL (NO OLD USER ID ANYWHERE)
-            df["User ID"] = df["ID Member"].map(mapping)
+            df["User ID"] = df["ID Member"].astype(str).str.strip().map(mapping)
 
-    else:
-        df["User ID"] = pd.NA
-
-    # fallback terakhir (ONLY ID MEMBER)
-    df["User ID"] = df["User ID"].fillna(df["ID Member"])
-
-    # =========================
-    # DUPLICATE LOGIC (REDO STYLE)
-    # =========================
-    result = []
-
-    for _, row in df.iterrows():
-
-        result.append(row.copy())
-
-        id_member = str(row.get("ID Member", ""))
-
-        if id_member.count("-") == 2 and id_member != "nan":
-
-            if row.get("User ID") != id_member:
-                new_row = row.copy()
-                new_row["User ID"] = id_member
-                result.append(new_row)
-
-    df = pd.DataFrame(result)
+    # fallback
+    if "User ID" not in df.columns:
+        df["User ID"] = df.get("ID Member", pd.NA)
 
     # =========================
-    # DROP ID MEMBER FINAL
+    # CLEAN USER ID (ANTI NAN CRASH)
     # =========================
-    df = df.drop(columns=["ID Member"], errors="ignore")
+    for col in ["User ID", "ID Member"]:
+        if col in df.columns:
+            df[col] = (
+                df[col]
+                .astype(str)
+                .replace({"nan": pd.NA, "None": pd.NA, "-": pd.NA, "": pd.NA})
+                .str.strip()
+            )
+
+    if "User ID" in df.columns and "ID Member" in df.columns:
+        df["User ID"] = df["User ID"].fillna(df["ID Member"])
 
     # =========================
-    # POSISI KOLOM (REDO STYLE)
+    # DUPLICATE FIX (SAFE VERSION)
+    # =========================
+    if "ID Member" in df.columns:
+
+        result = []
+
+        for _, row in df.iterrows():
+
+            result.append(row.copy())
+
+            id_member = str(row.get("ID Member", ""))
+
+            if id_member.count("-") == 2 and id_member not in ["nan", "", "None"]:
+
+                if row.get("User ID") != id_member:
+                    new_row = row.copy()
+                    new_row["User ID"] = id_member
+                    result.append(new_row)
+
+        df = pd.DataFrame(result)
+        df = df.drop(columns=["ID Member"], errors="ignore")
+
+    # =========================
+    # FINAL COLUMN ORDER
     # =========================
     cols = list(df.columns)
 
@@ -210,18 +202,3 @@ def proses_cabut_pending(df, df_master=None):
         df = df[cols]
 
     return df
-
-
-# =========================
-# RUN
-# =========================
-if __name__ == "__main__":
-
-    df = pd.read_excel("cabut pending 04.xls")
-    df_master = pd.read_excel("Member user master3.xlsx")
-
-    hasil = proses_cabut_pending(df, df_master)
-
-    hasil.to_excel("hasil_cabut_pending_final.xlsx", index=False)
-
-    print("SELESAI 🚀")
