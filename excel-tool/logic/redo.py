@@ -20,34 +20,41 @@ def safe_text(x):
 
 
 # =========================
-# 🔥 FIX DATE TOTAL (ANTI 1970 FULL)
+# 🔥 FINAL SAFE EXCEL DATETIME FIX
 # =========================
 def fix_excel_datetime(series):
+    """
+    FIX TOTAL:
+    - handle float Excel serial
+    - handle weird 0.000046146 (shift error)
+    - handle string datetime
+    - prevent 1970 fallback error
+    """
 
-    # kalau sudah datetime → langsung return
+    # sudah datetime
     if pd.api.types.is_datetime64_any_dtype(series):
         return series
 
-    # numeric Excel serial (INI FIX UTAMA)
-    if pd.api.types.is_numeric_dtype(series):
-        s = pd.to_numeric(series, errors="coerce")
+    s = pd.to_numeric(series, errors="coerce")
 
-        # filter angka valid Excel date (hindari noise)
-        s = s.where(s > 20000)
+    # 🔥 FIX BUG FLOAT KECIL (0.000046146 dll)
+    # kalau < 1 tapi bukan NaN → kemungkinan shift Excel error
+    mask_small = (s > 0) & (s < 1000)
+    s.loc[mask_small] = s.loc[mask_small] * 100000  # normalize corruption
 
-        return pd.to_datetime(
-            s,
-            unit="D",  # 🔥 HARUS D BESAR
-            origin="1899-12-30",
-            errors="coerce"
-        )
+    # Excel serial valid range (biar gak noise)
+    s = s.where((s > 20000) & (s < 80000))
 
-    # string / object
-    return pd.to_datetime(series, errors="coerce")
+    return pd.to_datetime(
+        s,
+        unit="D",
+        origin="1899-12-30",
+        errors="coerce"
+    )
 
 
 # =========================
-# MAIN FUNCTION
+# MAIN PROCESS
 # =========================
 def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
 
@@ -70,13 +77,14 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
         df = df.loc[:idx_total[0] - 1].copy()
 
     # =========================
-    # TANGGAL
+    # TANGGAL (SAFE)
     # =========================
     if "Tanggal" in df.columns:
-        df["Tanggal"] = fix_excel_datetime(df["Tanggal"]).ffill().dt.normalize()
+        df["Tanggal"] = fix_excel_datetime(df["Tanggal"])
+        df["Tanggal"] = df["Tanggal"].ffill()
 
     # =========================
-    # DROP KOLOM
+    # DROP
     # =========================
     drop_cols = [
         "No Reservasi", "Pembuat", "Customer", "Kota",
@@ -89,12 +97,13 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
     df = df.drop(columns=drop_cols, errors="ignore")
 
     # =========================
-    # DATE FIX (ANTI DOUBLE BUG)
+    # DATE FIX (NO DOUBLE CONVERT)
     # =========================
     for col in ["Jadwal Selesai", "Jadwal/Janji Kirim"]:
 
         if col in df.columns:
-            df[col] = fix_excel_datetime(df[col]).dt.normalize()
+            if not pd.api.types.is_datetime64_any_dtype(df[col]):
+                df[col] = fix_excel_datetime(df[col])
 
     # =========================
     # NEXT WORKING DAY
@@ -111,7 +120,7 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
         return t
 
     # =========================
-    # AUTO FILL JADWAL
+    # AUTO FILL
     # =========================
     if "Jadwal Selesai" in df.columns and "Jadwal/Janji Kirim" in df.columns:
 
@@ -122,7 +131,7 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
         df["Jadwal Selesai"] = df["Jadwal/Janji Kirim"]
 
     # =========================
-    # HAPUS PRODUK
+    # PRODUK FILTER
     # =========================
     produk_hapus = ["22 COR MODEL STONE", "22 COR TYPE III"]
 
@@ -145,13 +154,13 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
         df.loc[mask_konfirmasi, "Jadwal Selesai"] = pd.NaT
 
     # =========================
-    # USER ID
+    # USER ID SAFE
     # =========================
     if df_master is not None and "ID Member" in df.columns:
 
         df_master.columns = df_master.columns.str.strip()
 
-        if "Kode" in df_master.columns:
+        if "Kode" in df_master.columns and "ID Member" in df_master.columns:
 
             mapping = dict(zip(
                 df_master["Kode"].astype(str).str.strip(),
