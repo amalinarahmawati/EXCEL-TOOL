@@ -38,20 +38,20 @@ def next_working_day(tanggal):
 # =========================
 def proses_redo(df, df_master):
 
+    if df is None:
+        return df
+
     df = df.copy()
-    df_master = df_master.copy()
-
-    # =========================
-    # CLEAN COLUMN
-    # =========================
     df.columns = df.columns.str.strip()
-    df_master.columns = df_master.columns.str.strip()
 
     # =========================
-    # VALIDATE MASTER
+    # MASTER CHECK
     # =========================
     if df_master is None or df_master.empty:
         raise ValueError("Master belum diupload")
+
+    df_master = df_master.copy()
+    df_master.columns = df_master.columns.str.strip()
 
     # =========================
     # CUT TOTAL
@@ -85,7 +85,7 @@ def proses_redo(df, df_master):
     df = df.drop(columns=[c for c in hapus_kolom if c in df.columns], errors="ignore")
 
     # =========================
-    # JADWAL OTOMATIS
+    # DATE LOGIC
     # =========================
     if "Jadwal Selesai" in df.columns:
         df["Jadwal Selesai"] = pd.to_datetime(df["Jadwal Selesai"], errors="coerce")
@@ -96,12 +96,10 @@ def proses_redo(df, df_master):
         mask = df["Jadwal/Janji Kirim"].isna()
         df.loc[mask, "Jadwal/Janji Kirim"] = df.loc[mask, "Jadwal Selesai"].apply(next_working_day)
 
-    # copy
-    if "Jadwal/Janji Kirim" in df.columns:
         df["Jadwal Selesai"] = df["Jadwal/Janji Kirim"]
 
     # =========================
-    # REMOVE PRODUK
+    # REMOVE PRODUCT
     # =========================
     if "Produk Gigi" in df.columns:
         produk_hapus = ["22 COR MODEL STONE", "22 COR TYPE III"]
@@ -110,23 +108,24 @@ def proses_redo(df, df_master):
         df = df[~df["Produk Gigi"].astype(str).str.upper().str.contains(pattern, na=False)]
 
     # =========================
-    # FIX NOMOR
+    # FIX NOMOR (FIXED INDENT ERROR)
     # =========================
     if "Nomor" in df.columns:
 
-    df["Nomor"] = df["Nomor"].apply(
-        lambda x: (
-            re.sub(r"\bK\b", "Konfirmasi",
-                   re.sub(r"\s+", " ", str(x))
-            ).strip()
-            if pd.notna(x) else x
-        )
-    )
+        def fix_nomor(x):
+            if pd.isna(x):
+                return x
+            x = str(x)
+            x = re.sub(r"\s+", " ", x)
+            x = re.sub(r"\bK\b", "Konfirmasi", x)
+            return x.strip()
+
+        df["Nomor"] = df["Nomor"].apply(fix_nomor)
 
     # =========================
-    # ===== MASTER MERGE =====
+    # MASTER MERGE SAFE
     # =========================
-    if "ID Member" in df.columns:
+    if "ID Member" in df.columns and "Kode" in df_master.columns:
 
         df["ID Member"] = df["ID Member"].astype(str).str.strip()
         df_master["Kode"] = df_master["Kode"].astype(str).str.strip()
@@ -142,7 +141,7 @@ def proses_redo(df, df_master):
         df = df.drop(columns=["Kode", "ID Member_y"], errors="ignore")
 
     # =========================
-    # CLEAN USER ID (INI FIX UTAMA "-")
+    # USER ID CLEAN (ANTI "-")
     # =========================
     if "User ID" in df.columns:
 
@@ -155,10 +154,8 @@ def proses_redo(df, df_master):
 
     if "ID Member" in df.columns:
         df["ID Member"] = df["ID Member"].astype(str).str.strip()
-
         df["User ID"] = df["User ID"].fillna(df["ID Member"])
 
-    # FINAL SAFETY
     df["User ID"] = df["User ID"].replace(["-", "–", "—"], pd.NA)
 
     # =========================
@@ -185,7 +182,7 @@ def proses_redo(df, df_master):
     df = df.drop(columns=["ID Member"], errors="ignore")
 
     # =========================
-    # PASIEN POSITION
+    # POSITIONING PASIEN
     # =========================
     if "Pasien" in df.columns and "User ID" in df.columns:
         cols = list(df.columns)
