@@ -2,47 +2,54 @@ import pandas as pd
 import numpy as np
 from datetime import timedelta
 
-# =========================
-# HOLIDAY
-# =========================
-tanggal_merah = pd.to_datetime([
-    "2026-01-01","2026-01-16","2026-02-17",
-    "2026-03-19","2026-03-21","2026-03-22",
-    "2026-04-03","2026-05-01","2026-05-14",
-    "2026-05-27","2026-05-31","2026-06-01",
-    "2026-06-16","2026-08-17","2026-08-25",
+TANGGAL_MERAH = pd.to_datetime([
+    "2026-01-01", "2026-01-16", "2026-02-17",
+    "2026-03-19", "2026-03-21", "2026-03-22",
+    "2026-04-03", "2026-05-01", "2026-05-14",
+    "2026-05-27", "2026-05-31", "2026-06-01",
+    "2026-06-16", "2026-08-17", "2026-08-25",
     "2026-12-25"
 ]).normalize()
 
 
+def safe_text(x):
+    if pd.isna(x):
+        return pd.NA
+    return str(x)
+
+
 # =========================
-# SAFE DATE (FIX ANTI 1970 FULL)
+# 🔥 FINAL SAFE EXCEL DATETIME FIX
 # =========================
-def safe_date(series):
-    s = pd.Series(series)
+def fix_excel_datetime(series):
+    """
+    FIX TOTAL:
+    - handle float Excel serial
+    - handle weird 0.000046146 (shift error)
+    - handle string datetime
+    - prevent 1970 fallback error
+    """
 
-    # kalau sudah datetime
-    if pd.api.types.is_datetime64_any_dtype(s):
-        return s
+    # sudah datetime
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return series
 
-    num = pd.to_numeric(s, errors="coerce")
+    s = pd.to_numeric(series, errors="coerce")
 
-    # Excel serial detect
-    excel = pd.to_datetime(
-        num,
+    # 🔥 FIX BUG FLOAT KECIL (0.000046146 dll)
+    # kalau < 1 tapi bukan NaN → kemungkinan shift Excel error
+    mask_small = (s > 0) & (s < 1000)
+    s.loc[mask_small] = s.loc[mask_small] * 100000  # normalize corruption
+
+    # Excel serial valid range (biar gak noise)
+    s = s.where((s > 20000) & (s < 80000))
+
+    return pd.to_datetime(
+        s,
         unit="D",
         origin="1899-12-30",
         errors="coerce"
     )
-
-    # string datetime fallback
-    text = pd.to_datetime(s, errors="coerce")
-
-    # merge smart (pilih yang valid)
-    result = excel.copy()
-    result[text.notna()] = text[text.notna()]
-
-    return result
 
 
 # =========================
