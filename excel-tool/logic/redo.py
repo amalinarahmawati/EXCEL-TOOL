@@ -3,9 +3,6 @@ import numpy as np
 import re
 from datetime import timedelta
 
-# =========================
-# HOLIDAY LIST
-# =========================
 TANGGAL_MERAH = pd.to_datetime([
     "2026-01-01", "2026-01-16", "2026-02-17",
     "2026-03-19", "2026-03-21", "2026-03-22",
@@ -16,12 +13,6 @@ TANGGAL_MERAH = pd.to_datetime([
 ]).normalize()
 
 
-# =========================
-# SAFE FUNCTIONS
-# =========================
-def safe_datetime(col):
-    return pd.to_datetime(col, errors="coerce")
-
 def safe_text(x):
     if pd.isna(x):
         return pd.NA
@@ -29,16 +20,27 @@ def safe_text(x):
 
 
 # =========================
-# MAIN FUNCTION
+# 🔥 FIX UTAMA: EXCEL DATE SAFE CONVERTER
 # =========================
+def fix_excel_datetime(series):
+    """
+    FIX 1970 ROOT CAUSE:
+    handle Excel serial date + string + datetime mix
+    """
+
+    # numeric excel serial
+    if pd.api.types.is_numeric_dtype(series):
+        return pd.to_datetime(series, unit="d", origin="1899-12-30", errors="coerce")
+
+    # string / object
+    return pd.to_datetime(series, errors="coerce")
+
+
 def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
 
     df = df.copy()
     df_master = df_master.copy() if df_master is not None else None
 
-    # =========================
-    # CLEAN COLUMN
-    # =========================
     df.columns = df.columns.str.strip()
 
     # =========================
@@ -58,7 +60,7 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
     # FILL TANGGAL
     # =========================
     if "Tanggal" in df.columns:
-        df["Tanggal"] = safe_datetime(df["Tanggal"]).ffill()
+        df["Tanggal"] = fix_excel_datetime(df["Tanggal"]).ffill()
 
     # =========================
     # DROP KOLOM
@@ -71,15 +73,14 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
         "Melanjutkan Jadwal Order", "No Resi Pengiriman",
         "Alasan Redo"
     ]
-
     df = df.drop(columns=drop_cols, errors="ignore")
 
     # =========================
-    # DATE CONVERT (IMPORTANT FIX 1970 ROOT)
+    # 🔥 FIX DATE (INI KUNCI)
     # =========================
     for col in ["Jadwal Selesai", "Jadwal/Janji Kirim"]:
         if col in df.columns:
-            df[col] = safe_datetime(df[col])
+            df[col] = fix_excel_datetime(df[col])
 
     # =========================
     # NEXT WORKING DAY
@@ -96,7 +97,7 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
         return t
 
     # =========================
-    # AUTO FILL JADWAL (SAFE)
+    # AUTO FILL
     # =========================
     if "Jadwal Selesai" in df.columns and "Jadwal/Janji Kirim" in df.columns:
 
@@ -104,7 +105,6 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
 
         df.loc[mask, "Jadwal/Janji Kirim"] = df.loc[mask, "Jadwal Selesai"].apply(next_working_day)
 
-        # ❗JANGAN string "-"
         df["Jadwal Selesai"] = df["Jadwal/Janji Kirim"]
 
     # =========================
@@ -122,68 +122,34 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame = None):
     if "Nomor" in df.columns:
 
         df["Nomor"] = df["Nomor"].apply(safe_text)
+        df["Nomor"] = df["Nomor"].str.replace(r"\s+", " ", regex=True)
+        df["Nomor"] = df["Nomor"].str.replace(r"\bK\b", "Konfirmasi", regex=True)
 
-        df["Nomor"] = df["Nomor"].apply(
-            lambda x: re.sub(r"\s+", " ", x).strip() if pd.notna(x) else x
-        )
+        mask_konfirmasi = df["Nomor"].str.contains("Konfirmasi", na=False)
 
-        df["Nomor"] = df["Nomor"].apply(
-            lambda x: re.sub(r"\bK\b", "Konfirmasi", x) if pd.notna(x) else x
-        )
-
-        mask_konfirmasi = df["Nomor"].astype(str).str.contains("Konfirmasi", na=False)
-
-        # ❗JANGAN "-", pakai NaT biar gak rusak datetime
-        if "Jadwal/Janji Kirim" in df.columns:
-            df.loc[mask_konfirmasi, "Jadwal/Janji Kirim"] = pd.NaT
-
-        if "Jadwal Selesai" in df.columns:
-            df.loc[mask_konfirmasi, "Jadwal Selesai"] = pd.NaT
+        df.loc[mask_konfirmasi, "Jadwal/Janji Kirim"] = pd.NaT
+        df.loc[mask_konfirmasi, "Jadwal Selesai"] = pd.NaT
 
     # =========================
-    # USER ID FROM MASTER (FIXED MAPPING)
+    # USER ID
     # =========================
     if df_master is not None and "ID Member" in df.columns:
 
         df_master.columns = df_master.columns.str.strip()
 
-        if "Kode" in df_master.columns and "ID Member" in df_master.columns:
+        if "Kode" in df_master.columns:
 
-            df_master["Kode"] = df_master["Kode"].astype(str).str.strip()
-            df_master["ID Member"] = df_master["ID Member"].astype(str).str.strip()
-
-            mapping = dict(zip(df_master["Kode"], df_master["ID Member"]))
+            mapping = dict(zip(
+                df_master["Kode"].astype(str).str.strip(),
+                df_master["ID Member"].astype(str).str.strip()
+            ))
 
             df["User ID"] = df["ID Member"].astype(str).str.strip().map(mapping)
 
-    # fallback SAFE
     if "User ID" not in df.columns:
         df["User ID"] = pd.NA
 
     if "ID Member" in df.columns:
         df["User ID"] = df["User ID"].fillna(df["ID Member"])
-
-    # =========================
-    # FINAL CLEAN DATE (ANTI 1970 BUG FIX)
-    # =========================
-    for col in ["Jadwal Selesai", "Jadwal/Janji Kirim"]:
-        if col in df.columns:
-            df[col] = pd.to_datetime(df[col], errors="coerce")
-
-    # =========================
-    # POSISI KOLOM
-    # =========================
-    cols = list(df.columns)
-
-    if "Pasien" in cols and "User ID" in cols:
-        cols.remove("Pasien")
-        cols.insert(cols.index("User ID"), "Pasien")
-        df = df[cols]
-
-    if "Dokter" in df.columns:
-        cols = list(df.columns)
-        cols.remove("Dokter")
-        cols.append("Dokter")
-        df = df[cols]
 
     return df
