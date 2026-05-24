@@ -119,23 +119,22 @@ def proses_redo(df: pd.DataFrame, df_master: pd.DataFrame):
     # =========================
     # FIX NOMOR
     # =========================
-    if "Nomor" in df.columns:
-        def fix_nomor(x):
+    def safe_text(x):
+    if x is None:
+        return x
     if pd.isna(x):
         return x
+    return str(x)
 
-    x = str(x)
+df["Nomor"] = df["Nomor"].apply(safe_text)
 
-    x = re.sub(r'\s+', ' ', x)
-    x = re.sub(r'\bK\b', 'Konfirmasi', x)
+df["Nomor"] = df["Nomor"].apply(
+    lambda x: re.sub(r'\s+', ' ', x).strip() if pd.notna(x) else x
+)
 
-    return x.strip()
-
-
-df["Nomor"] = df["Nomor"].apply(fix_nomor)
-        )
-
-        mask_konfirmasi = df["Nomor"].str.contains("Konfirmasi", case=False, na=False)
+df["Nomor"] = df["Nomor"].apply(
+    lambda x: re.sub(r'\bK\b', 'Konfirmasi', x) if pd.notna(x) else x
+)
 
         # IMPORTANT: pakai NaT (BUKAN "-")
         if "Jadwal/Janji Kirim" in df.columns:
