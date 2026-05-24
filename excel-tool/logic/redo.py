@@ -223,4 +223,25 @@ def proses_redo(df, df_master=None):
         df = pd.DataFrame(result)
         df = df.drop(columns=["ID Member"], errors="ignore")
 
+     # =========================
+    # POSISI KOLOM
+    # =========================
+    cols = list(df.columns)
+
+    if "User ID" in cols and "Produk Gigi" in cols:
+        cols.remove("Pasien")
+        cols.insert(cols.index("Produk Gigi"), "User ID")
+        df = df[cols]
+
+    if "Pasien" in cols and "User ID" in cols:
+        cols.remove("Pasien")
+        cols.insert(cols.index("User ID"), "Pasien")
+        df = df[cols]
+
+    if "Dokter" in df.columns:
+        cols = list(df.columns)
+        cols.remove("Dokter")
+        cols.append("Dokter")
+        df = df[cols]
+
     return df
