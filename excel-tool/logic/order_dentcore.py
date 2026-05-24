@@ -149,20 +149,60 @@ def proses_order_dentcore(df):
         if "Jadwal Selesai" in df.columns:
             df.loc[mask_konfirmasi, "Jadwal Selesai"] = np.nan
 
-    # =========================
-    # USER ID CLEAN
+        # =========================
+    # USER ID CLEAN (FIX TOTAL)
     # =========================
     if "User ID" in df.columns:
-        df["User ID"] = df["User ID"].replace(["nan", "", "None", "-", " "], pd.NA)
+
+        df["User ID"] = (
+            df["User ID"]
+            .astype(str)
+            .str.strip()
+            .replace({
+                "nan": pd.NA,
+                "None": pd.NA,
+                "none": pd.NA,
+                "": pd.NA,
+                "-": pd.NA,
+                "–": pd.NA,
+                "—": pd.NA,
+                " - ": pd.NA
+            })
+        )
 
     if "ID Member" in df.columns:
-        df["ID Member"] = df["ID Member"].replace(["nan", "", "None", " "], pd.NA)
+
+        df["ID Member"] = (
+            df["ID Member"]
+            .astype(str)
+            .str.strip()
+            .replace({
+                "nan": pd.NA,
+                "None": pd.NA,
+                "none": pd.NA,
+                "": pd.NA,
+                "-": pd.NA,
+                "–": pd.NA,
+                "—": pd.NA,
+                " - ": pd.NA
+            })
+        )
+
+    # isi User ID dari ID Member (SAFE)
+    if "User ID" in df.columns and "ID Member" in df.columns:
         df["User ID"] = df["User ID"].fillna(df["ID Member"])
 
+    # FINAL SAFETY CLEAN
+    if "User ID" in df.columns:
+        df["User ID"] = df["User ID"].replace(["-", "–", "—"], pd.NA)
+
     # =========================
-    # DUPLICATE FIX
+    # DUPLICATE LOGIC FIX
     # =========================
-    if "User ID" in df.columns and "ID Member" in df.columns:
+    if (
+        "User ID" in df.columns
+        and "ID Member" in df.columns
+    ):
 
         result = []
 
@@ -171,16 +211,24 @@ def proses_order_dentcore(df):
             user_id = row.get("User ID")
             id_member = str(row.get("ID Member", ""))
 
-            is_special = id_member.count("-") == 2 and id_member != "nan"
+            is_special_id = (
+                id_member.count("-") == 2
+                and id_member != "nan"
+            )
 
             result.append(row.copy())
 
-            if is_special and user_id != id_member:
+            if (
+                pd.notna(user_id)
+                and is_special_id
+                and user_id != id_member
+            ):
                 new_row = row.copy()
                 new_row["User ID"] = id_member
                 result.append(new_row)
 
         df = pd.DataFrame(result)
+
         df = df.drop(columns=["ID Member"], errors="ignore")
 
     # =========================
