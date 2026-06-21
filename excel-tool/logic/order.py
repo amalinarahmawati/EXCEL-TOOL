@@ -173,85 +173,91 @@ def proses_order(df):
         df.loc[mask_konfirmasi, ["Jadwal/Janji Kirim","Jadwal Selesai"]] = pd.NaT
 
      # =========================
-    # USER ID CLEAN (FIX TOTAL)
-    # =========================
-    if "User ID" in df.columns:
-
-        df["User ID"] = (
-            df["User ID"]
-            .astype(str)
-            .str.strip()
-            .replace({
-                "nan": pd.NA,
-                "None": pd.NA,
-                "none": pd.NA,
-                "": pd.NA,
-                "-": pd.NA,
-                "–": pd.NA,
-                "—": pd.NA,
-                " - ": pd.NA
-            })
-        )
-
-    if "ID Member" in df.columns:
-
-        df["ID Member"] = (
-            df["ID Member"]
-            .astype(str)
-            .str.strip()
-            .replace({
-                "nan": pd.NA,
-                "None": pd.NA,
-                "none": pd.NA,
-                "": pd.NA,
-                "-": pd.NA,
-                "–": pd.NA,
-                "—": pd.NA,
-                " - ": pd.NA
-            })
-        )
-
-    # isi User ID dari ID Member (SAFE)
-    if "User ID" in df.columns and "ID Member" in df.columns:
-        df["User ID"] = df["User ID"].fillna(df["ID Member"])
-
-    # FINAL SAFETY CLEAN
-    if "User ID" in df.columns:
-        df["User ID"] = df["User ID"].replace(["-", "–", "—"], pd.NA)
-
-    # =========================
-    # DUPLICATE LOGIC FIX
-    # =========================
-    if (
-        "User ID" in df.columns
-        and "ID Member" in df.columns
-    ):
-
-        result = []
-
-        for _, row in df.iterrows():
-
-            user_id = row.get("User ID")
-            id_member = str(row.get("ID Member", ""))
-
-            is_special_id = (
-                id_member.count("-") == 2
-                and id_member != "nan"
+        # USER ID & ID MEMBER CLEAN
+        # =========================
+        for col in ["User ID", "ID Member"]:
+        
+            if col in df.columns:
+        
+                df[col] = (
+                    df[col]
+                    .astype(str)
+                    .str.strip()
+                    .replace(
+                        r"^[-–—\s]*$",
+                        pd.NA,
+                        regex=True
+                    )
+                    .replace({
+                        "nan": pd.NA,
+                        "None": pd.NA,
+                        "none": pd.NA,
+                        "NaT": pd.NA
+                    })
+                )
+        
+        # =========================
+        # FILL USER ID DARI ID MEMBER
+        # =========================
+        if "User ID" in df.columns and "ID Member" in df.columns:
+            df["User ID"] = df["User ID"].fillna(df["ID Member"])
+        
+        # =========================
+        # DUPLICATE LOGIC
+        # =========================
+        if "User ID" in df.columns and "ID Member" in df.columns:
+        
+            result = []
+        
+            for _, row in df.iterrows():
+        
+                result.append(row.copy())
+        
+                user_id = row.get("User ID")
+                id_member = row.get("ID Member")
+        
+                if pd.isna(id_member):
+                    continue
+        
+                id_member = str(id_member).strip()
+        
+                is_special_id = id_member.count("-") == 2
+        
+                if (
+                    pd.notna(user_id)
+                    and is_special_id
+                    and str(user_id).strip() != id_member
+                ):
+                    new_row = row.copy()
+                    new_row["User ID"] = id_member
+                    result.append(new_row)
+        
+            df = pd.DataFrame(result)
+        
+        # =========================
+        # FINAL USER ID SAFETY
+        # =========================
+        if "User ID" in df.columns:
+        
+            df["User ID"] = (
+                df["User ID"]
+                .astype(str)
+                .str.strip()
+                .replace(
+                    r"^[-–—\s]*$",
+                    pd.NA,
+                    regex=True
+                )
+                .replace({
+                    "nan": pd.NA,
+                    "None": pd.NA,
+                    "none": pd.NA
+                })
             )
-
-            result.append(row.copy())
-
-            if (
-                pd.notna(user_id)
-                and is_special_id
-                and user_id != id_member
-            ):
-                new_row = row.copy()
-                new_row["User ID"] = id_member
-                result.append(new_row)
-
-        df = pd.DataFrame(result)
-
+        
+        # =========================
+        # HAPUS ID MEMBER
+        # =========================
         df = df.drop(columns=["ID Member"], errors="ignore")
 
     # =========================
