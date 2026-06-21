@@ -129,14 +129,27 @@ def proses_order(df):
         df["Jadwal Selesai"] = df["Jadwal/Janji Kirim"]
 
     # =========================
-    # PRODUK FILTER
+    # HAPUS PRODUK TERTENTU
     # =========================
-    produk_hapus = ["22 COR MODEL STONE","22 COR TYPE III"]
-    pattern = "|".join(produk_hapus)
-
+    produk_hapus = [
+        "22 COR MODEL STONE",
+        "22 COR TYPE III"
+    ]
+    
+    kolom_produk = None
+    
     if "Produk Gigi / Tambahan" in df.columns:
+        kolom_produk = "Produk Gigi / Tambahan"
+    
+    elif "Produk Gigi" in df.columns:
+        kolom_produk = "Produk Gigi"
+    
+    if kolom_produk:
+    
+        pattern = "|".join(produk_hapus)
+    
         df = df[
-            ~df["Produk Gigi / Tambahan"]
+            ~df[kolom_produk]
             .astype(str)
             .str.upper()
             .str.contains(pattern, na=False)
