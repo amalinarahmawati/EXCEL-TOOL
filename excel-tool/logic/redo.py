@@ -224,19 +224,45 @@ def proses_redo(df, df_master=None):
         df = df.drop(columns=["ID Member"], errors="ignore")
 
      # =========================
-    # POSISI KOLOM
-    # =========================
-    cols = list(df.columns)
-
-    if "Pasien" in cols and "User ID" in cols:
-        cols.remove("Pasien")
-        cols.insert(cols.index("User ID"), "Pasien")
-        df = df[cols]
-
-    if "Dokter" in df.columns:
+        # POSISI KOLOM FINAL
+        # Pasien | User ID | Produk Gigi
+        # Dokter paling kanan
+        # =========================
         cols = list(df.columns)
-        cols.remove("Dokter")
-        cols.append("Dokter")
+        
+        # pindahkan Pasien sebelum User ID
+        if "Pasien" in cols and "User ID" in cols:
+        
+            cols.remove("Pasien")
+        
+            posisi_user = cols.index("User ID")
+        
+            cols.insert(posisi_user, "Pasien")
+        
+        # pindahkan Produk Gigi setelah User ID
+        kolom_produk = None
+        
+        if "Produk Gigi / Tambahan" in cols:
+            kolom_produk = "Produk Gigi / Tambahan"
+        
+        elif "Produk Gigi" in cols:
+            kolom_produk = "Produk Gigi"
+        
+        if kolom_produk and "User ID" in cols:
+        
+            cols.remove(kolom_produk)
+        
+            posisi_user = cols.index("User ID")
+        
+            cols.insert(posisi_user + 1, kolom_produk)
+        
+        # Dokter paling kanan
+        if "Dokter" in cols:
+        
+            cols.remove("Dokter")
+        
+            cols.append("Dokter")
+        
         df = df[cols]
 
     return df
