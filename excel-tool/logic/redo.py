@@ -239,23 +239,6 @@ def proses_redo(df, df_master=None):
         
             cols.insert(posisi_user, "Pasien")
         
-        # pindahkan Produk Gigi setelah User ID
-        kolom_produk = None
-        
-        if "Produk Gigi / Tambahan" in cols:
-            kolom_produk = "Produk Gigi / Tambahan"
-        
-        elif "Produk Gigi" in cols:
-            kolom_produk = "Produk Gigi"
-        
-        if kolom_produk and "User ID" in cols:
-        
-            cols.remove(kolom_produk)
-        
-            posisi_user = cols.index("User ID")
-        
-            cols.insert(posisi_user + 1, kolom_produk)
-        
         # Dokter paling kanan
         if "Dokter" in cols:
         
