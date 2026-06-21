@@ -260,4 +260,24 @@ def proses_redo(df, df_master=None):
     
     df = df[cols]
 
+    # =========================
+    # TAMPILKAN "-" UNTUK TANGGAL KOSONG
+    # =========================
+    for col in ["Jadwal/Janji Kirim", "Jadwal Selesai"]:
+    
+        if col in df.columns:
+    
+            df[col] = (
+                df[col]
+                .replace({
+                    None: pd.NA,
+                    "None": pd.NA,
+                    "none": pd.NA,
+                    "NaT": pd.NA,
+                    "nan": pd.NA,
+                    "<NA>": pd.NA
+                })
+                .fillna("-")
+            )
+
     return df
