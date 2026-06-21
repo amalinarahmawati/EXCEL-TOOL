@@ -159,33 +159,90 @@ def proses_order(df):
 
         df.loc[mask_konfirmasi, ["Jadwal/Janji Kirim","Jadwal Selesai"]] = pd.NaT
 
+     # =========================
+    # USER ID CLEAN (FIX TOTAL)
     # =========================
-    # USER CLEAN
-    # =========================
-    for col in ["User ID","ID Member"]:
-        if col in df.columns:
-            df[col] = df[col].astype(str).replace({
-                "nan":pd.NA,"None":pd.NA,"-":pd.NA,"":pd.NA
-            }).str.strip()
+    if "User ID" in df.columns:
 
+        df["User ID"] = (
+            df["User ID"]
+            .astype(str)
+            .str.strip()
+            .replace({
+                "nan": pd.NA,
+                "None": pd.NA,
+                "none": pd.NA,
+                "": pd.NA,
+                "-": pd.NA,
+                "–": pd.NA,
+                "—": pd.NA,
+                " - ": pd.NA
+            })
+        )
+
+    if "ID Member" in df.columns:
+
+        df["ID Member"] = (
+            df["ID Member"]
+            .astype(str)
+            .str.strip()
+            .replace({
+                "nan": pd.NA,
+                "None": pd.NA,
+                "none": pd.NA,
+                "": pd.NA,
+                "-": pd.NA,
+                "–": pd.NA,
+                "—": pd.NA,
+                " - ": pd.NA
+            })
+        )
+
+    # isi User ID dari ID Member (SAFE)
     if "User ID" in df.columns and "ID Member" in df.columns:
         df["User ID"] = df["User ID"].fillna(df["ID Member"])
 
+    # FINAL SAFETY CLEAN
+    if "User ID" in df.columns:
+        df["User ID"] = df["User ID"].replace(["-", "–", "—"], pd.NA)
+
     # =========================
-    # DUPLICATE FIX
+    # DUPLICATE LOGIC FIX
     # =========================
-    if "User ID" in df.columns and "ID Member" in df.columns:
+    if (
+        "User ID" in df.columns
+        and "ID Member" in df.columns
+    ):
 
-        special = df["ID Member"].astype(str).str.count("-") == 2
+        result = []
 
-        extra = df[special & (df["User ID"] != df["ID Member"])].copy()
-        extra["User ID"] = extra["ID Member"]
+        for _, row in df.iterrows():
 
-        df = pd.concat([df, extra], ignore_index=True)
+            user_id = row.get("User ID")
+            id_member = str(row.get("ID Member", ""))
+
+            is_special_id = (
+                id_member.count("-") == 2
+                and id_member != "nan"
+            )
+
+            result.append(row.copy())
+
+            if (
+                pd.notna(user_id)
+                and is_special_id
+                and user_id != id_member
+            ):
+                new_row = row.copy()
+                new_row["User ID"] = id_member
+                result.append(new_row)
+
+        df = pd.DataFrame(result)
+
         df = df.drop(columns=["ID Member"], errors="ignore")
 
     # =========================
-    # POSISI KOLOM
+    # POSISI KOLOM PASIEN
     # =========================
     cols = list(df.columns)
 
@@ -194,10 +251,27 @@ def proses_order(df):
         cols.insert(cols.index("User ID"), "Pasien")
         df = df[cols]
 
+    # =========================
+    # DOKTER KE AKHIR
+    # =========================
     if "Dokter" in df.columns:
         cols = list(df.columns)
         cols.remove("Dokter")
         cols.append("Dokter")
         df = df[cols]
+
+    # =========================
+    # OPTIONAL: TAMPILKAN "-"
+    # DI OUTPUT EXCEL
+    # =========================
+    if "Jadwal/Janji Kirim" in df.columns:
+        df["Jadwal/Janji Kirim"] = df[
+            "Jadwal/Janji Kirim"
+        ].fillna("-")
+
+    if "Jadwal Selesai" in df.columns:
+        df["Jadwal Selesai"] = df[
+            "Jadwal Selesai"
+        ].fillna("-")
 
     return df
