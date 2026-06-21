@@ -186,19 +186,41 @@ def proses_cabut_pending(df, df_master=None):
         df = pd.DataFrame(result)
         df = df.drop(columns=["ID Member"], errors="ignore")
 
-    # =========================
-    # FINAL COLUMN ORDER
-    # =========================
-    cols = list(df.columns)
-
-    if "Pasien" in cols and "User ID" in cols:
-        cols.remove("Pasien")
-        cols.insert(cols.index("User ID"), "Pasien")
-        df = df[cols]
-
-    if "Dokter" in cols:
-        cols.remove("Dokter")
-        cols.append("Dokter")
+     # =========================
+        # POSISI KOLOM FINAL
+        # Pasien | User ID | Produk Gigi
+        # =========================
+        cols = list(df.columns)
+        
+        # cari kolom produk
+        kolom_produk = None
+        
+        if "Produk Gigi / Tambahan" in cols:
+            kolom_produk = "Produk Gigi / Tambahan"
+        
+        elif "Produk Gigi" in cols:
+            kolom_produk = "Produk Gigi"
+        
+        if (
+            kolom_produk
+            and "Pasien" in cols
+            and "User ID" in cols
+        ):
+        
+            cols.remove("Pasien")
+            cols.remove("User ID")
+        
+            posisi_produk = cols.index(kolom_produk)
+        
+            cols.insert(posisi_produk, "Pasien")
+            cols.insert(posisi_produk + 1, "User ID")
+        
+        # Dokter paling kanan
+        if "Dokter" in cols:
+        
+            cols.remove("Dokter")
+            cols.append("Dokter")
+        
         df = df[cols]
 
     return df
