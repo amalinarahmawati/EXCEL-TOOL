@@ -127,9 +127,7 @@ Silakan upload file dengan format *.xls
     "Jadwal Klinik": r"^jadwal klinik(\s+\d+)?\.xls$",
     "Point Klinik": r"^point(\s+\d+)?\.xls$",
 }
-
-        if menu in pola:
-    
+ if menu in pola:
             if not re.match(pola[menu], nama_file):
     
                 st.error(
