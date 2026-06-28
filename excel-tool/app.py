@@ -128,34 +128,66 @@ Silakan upload file dengan format *.xls
     "Point Klinik": r"^point(\s+\d+)?\.xls$",
 }
 
-    if menu in pola:
-
-        if not re.match(pola[menu], nama_file):
-
-            st.error(
-                f"""
-🚫 File yang dipilih tidak sesuai!
-
-Menu yang dipilih :
-➡️ {menu}
-
-File yang diupload :
-➡️ {uploaded_file.name}
-
-Silakan upload file yang sesuai.
-"""
+        if menu in pola:
+    
+            if not re.match(pola[menu], nama_file):
+    
+                st.error(
+                    f"""
+    🚫 File yang dipilih tidak sesuai!
+    
+    Menu yang dipilih :
+    ➡️ {menu}
+    
+    File yang diupload :
+    ➡️ {uploaded_file.name}
+    
+    Silakan upload file yang sesuai.
+    """
             )
             st.stop()
 
-# ======================
-# PROCESSING
-# ======================
-if uploaded_file:
+    # ======================
+    # PROCESSING
+    # ======================
+    if uploaded_file:
 
     # ======================
     # VALIDASI FILE UTAMA
     # ======================
     validasi_file(uploaded_file, menu)
+
+    # ======================
+    # VALIDASI MASTER FILE
+    # ======================
+    def validasi_master(master_file):
+    
+        nama_file = master_file.name.lower().strip()
+    
+        # master boleh xls atau xlsx
+        if not (nama_file.endswith(".xls") or nama_file.endswith(".xlsx")):
+            st.error("""
+    File master harus berupa Excel (.xls atau .xlsx).
+    """)
+            st.stop()
+    
+        # nama file wajib Member User Master
+        pola_master = r"^member user master\s*\d*\.xlsx?$"
+    
+        if not re.match(pola_master, nama_file):
+            st.error(f"""
+    File Master tidak sesuai.
+    
+    Nama file yang diperbolehkan misalnya:
+    
+    • Member User Master.xlsx
+    • Member User Master2.xlsx
+    • Member User Master 3.xlsx
+    
+    File yang dipilih:
+    {master_file.name}
+    """)
+            st.stop()
 
     # ======================
     # BACA FILE
@@ -164,6 +196,9 @@ if uploaded_file:
 
     df_master = None
     if master_file:
+    
+        validasi_master(master_file)
+    
         df_master = pd.read_excel(master_file)
 
     st.subheader(f"📌 Modul Aktif: {kategori} - {menu}")
