@@ -114,16 +114,16 @@ Silakan upload file dengan format *.xls
     # VALIDASI NAMA FILE
     # ======================
     pola = {
-        "Faktur": r"^faktur, faktur dentcore(\s+\d+)?\.xls$",
-        "Mutasi": r"^mutasi(\s+\d+)?\.xls$",
-        "Order": r"^order(\s+\d+)?\.xls$",
-        "Redo": r"^redo(\s+\d+)?\.xls$",
-        "Cabut Pending": r"^cabut pending(\s+\d+)?\.xls$",
-        "Order Dentcore": r"^order dentcore(\s+\d+)?\.xls$",
-        "Redo Dentcore": r"^redo dentcore(\s+\d+)?\.xls$",
-        "Jadwal Klinik": r"^jadwal klinik(\s+\d+)?\.xls$",
-        "Point Klinik": r"^point klinik(\s+\d+)?\.xls$",
-    }
+    "Faktur": r"^(faktur|faktur dentcore)(\s+\d+)?\.xls$",
+    "Mutasi": r"^mutasi(\s+\d+)?\.xls$",
+    "Order": r"^order(\s+\d+)?\.xls$",
+    "Redo": r"^redo(\s+\d+)?\.xls$",
+    "Cabut Pending": r"^cabut pending(\s+\d+)?\.xls$",
+    "Order Dentcore": r"^order dentcore(\s+\d+)?\.xls$",
+    "Redo Dentcore": r"^redo dentcore(\s+\d+)?\.xls$",
+    "Jadwal Klinik": r"^jadwal klinik(\s+\d+)?\.xls$",
+    "Point Klinik": r"^point klinik(\s+\d+)?\.xls$",
+}
 
     if menu in pola:
 
