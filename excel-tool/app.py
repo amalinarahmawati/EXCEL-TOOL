@@ -114,7 +114,7 @@ Silakan upload file dengan format *.xls
     # VALIDASI NAMA FILE
     # ======================
     pola = {
-        "Faktur": r"^faktur(\s+\d+)?\.xls$",
+        "Faktur": r"^faktur, faktur dentcore(\s+\d+)?\.xls$",
         "Mutasi": r"^mutasi(\s+\d+)?\.xls$",
         "Order": r"^order(\s+\d+)?\.xls$",
         "Redo": r"^redo(\s+\d+)?\.xls$",
