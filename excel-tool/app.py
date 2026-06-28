@@ -125,7 +125,7 @@ Silakan upload file dengan format *.xls
     "Order Dentcore": r"^order dentcore(\s+\d+)?\.xls$",
     "Redo Dentcore": r"^redo dentcore(\s+\d+)?\.xls$",
     "Jadwal Klinik": r"^jadwal klinik(\s+\d+)?\.xls$",
-    "Point Klinik": r"^point klinik(\s+\d+)?\.xls$",
+    "Point Klinik": r"^point(\s+\d+)?\.xls$",
 }
 
     if menu in pola:
