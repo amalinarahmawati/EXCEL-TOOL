@@ -96,7 +96,7 @@ def validasi_file(uploaded_file, menu):
             """
 ❌ Format file tidak didukung!
 
-Silakan gunakan file Excel 97-2003 (*.xls)
+Silakan gunakan file Excel tipe (*.xls)
 
 File *.xlsx tidak dapat diproses.
 """
