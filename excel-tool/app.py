@@ -86,118 +86,105 @@ def to_excel(df):
 # ======================
 def validasi_file(uploaded_file, menu):
 
-    nama_file = uploaded_file.name.lower()
+    nama_file = uploaded_file.name.lower().strip()
 
     # ======================
     # HARUS FORMAT .XLS
     # ======================
     if nama_file.endswith(".xlsx"):
-        st.error(
-            """
+        st.error("""
 ❌ Format file tidak didukung!
 
 Silakan gunakan file Excel tipe (*.xls)
 
 File *.xlsx tidak dapat diproses.
-"""
-        )
+""")
         st.stop()
 
     if not nama_file.endswith(".xls"):
-        st.error(
-            """
+        st.error("""
 ❌ Format file tidak dikenali!
 
 Silakan upload file dengan format *.xls
-"""
-        )
+""")
         st.stop()
 
     # ======================
     # VALIDASI NAMA FILE
     # ======================
     pola = {
-    "Faktur": r"^(faktur|faktur dentcore)(\s+\d+)?\.xls$",
-    "Mutasi": r"^mutasi(\s+\d+)?\.xls$",
-    "Order": r"^order(\s+\d+)?\.xls$",
-    "Redo": r"^redo(\s+\d+)?\.xls$",
-    "Cabut Pending": r"^cabut pending(\s+\d+)?\.xls$",
-    "Order Dentcore": r"^order dentcore(\s+\d+)?\.xls$",
-    "Redo Dentcore": r"^redo dentcore(\s+\d+)?\.xls$",
-    "Jadwal Klinik": r"^jadwal klinik(\s+\d+)?\.xls$",
-    "Point Klinik": r"^point(\s+\d+)?\.xls$",
-}
-    
-  if menu in pola:
-            if not re.match(pola[menu], nama_file):
-    
-                st.error(
-                    f"""
-    🚫 File yang dipilih tidak sesuai!
-    
-    Menu yang dipilih :
-    ➡️ {menu}
-    
-    File yang diupload :
-    ➡️ {uploaded_file.name}
-    
-    Silakan upload file yang sesuai.
-    """
-            )
+        "Faktur": r"^(faktur|faktur dentcore)(\s+\d+)?\.xls$",
+        "Mutasi": r"^mutasi(\s+\d+)?\.xls$",
+        "Order": r"^order(\s+\d+)?\.xls$",
+        "Redo": r"^redo(\s+\d+)?\.xls$",
+        "Cabut Pending": r"^cabut pending(\s+\d+)?\.xls$",
+        "Order Dentcore": r"^order dentcore(\s+\d+)?\.xls$",
+        "Redo Dentcore": r"^redo dentcore(\s+\d+)?\.xls$",
+        "Jadwal Klinik": r"^jadwal klinik(\s+\d+)?\.xls$",
+        "Point Klinik": r"^point(\s+\d+)?\.xls$",
+    }
+
+    if menu in pola:
+        if not re.match(pola[menu], nama_file):
+            st.error(f"""
+🚫 File yang dipilih tidak sesuai!
+
+Menu yang dipilih :
+➡️ {menu}
+
+File yang diupload :
+➡️ {uploaded_file.name}
+
+Silakan upload file yang sesuai.
+""")
             st.stop()
 
     # ======================
-    # PROCESSING
-    # ======================
-    if uploaded_file:
+# VALIDASI MASTER FILE
+# ======================
+def validasi_master(master_file):
+
+    nama_file = master_file.name.lower().strip()
+
+    # master boleh xls atau xlsx
+    if not (nama_file.endswith(".xls") or nama_file.endswith(".xlsx")):
+        st.error("""
+File master harus berupa Excel (.xls atau .xlsx).
+""")
+        st.stop()
+
+    pola_master = r"^member user master\s*\d*\.xlsx?$"
+
+    if not re.match(pola_master, nama_file):
+        st.error(f"""
+File Master tidak sesuai.
+
+Nama file yang diperbolehkan:
+
+• Member User Master.xlsx
+• Member User Master2.xlsx
+• Member User Master 3.xlsx
+
+File yang dipilih:
+{master_file.name}
+""")
+        st.stop()
 
     # ======================
-    # VALIDASI FILE UTAMA
-    # ======================
+# PROCESSING
+# ======================
+if uploaded_file:
+
+    # validasi file utama
     validasi_file(uploaded_file, menu)
 
-    # ======================
-    # VALIDASI MASTER FILE
-    # ======================
-    def validasi_master(master_file):
-    
-        nama_file = master_file.name.lower().strip()
-    
-        # master boleh xls atau xlsx
-        if not (nama_file.endswith(".xls") or nama_file.endswith(".xlsx")):
-            st.error("""
-    File master harus berupa Excel (.xls atau .xlsx).
-    """)
-            st.stop()
-    
-        # nama file wajib Member User Master
-        pola_master = r"^member user master\s*\d*\.xlsx?$"
-    
-        if not re.match(pola_master, nama_file):
-            st.error(f"""
-    File Master tidak sesuai.
-    
-    Nama file yang diperbolehkan misalnya:
-    
-    • Member User Master.xlsx
-    • Member User Master2.xlsx
-    • Member User Master 3.xlsx
-    
-    File yang dipilih:
-    {master_file.name}
-    """)
-            st.stop()
-
-    # ======================
-    # BACA FILE
-    # ======================
+    # baca file utama
     df = pd.read_excel(uploaded_file)
 
+    # baca master jika ada
     df_master = None
     if master_file:
-    
         validasi_master(master_file)
-    
         df_master = pd.read_excel(master_file)
 
     st.subheader(f"📌 Modul Aktif: {kategori} - {menu}")
