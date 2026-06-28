@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
+import re
 
 # ===== LAB =====
 from logic.faktur import proses_faktur
@@ -77,16 +78,106 @@ def to_excel(df):
         df.to_excel(writer, index=False)
     output.seek(0)
     return output
+# ======================
+# VALIDASI FILE
+# ======================
+def validasi_file(uploaded_file, menu):
 
+    nama_file = uploaded_file.name.lower()
+
+    # ======================
+    # HARUS FORMAT .XLS
+    # ======================
+    if nama_file.endswith(".xlsx"):
+        st.error(
+            """
+❌ Format file tidak didukung!
+
+Silakan gunakan file Excel 97-2003 (*.xls)
+
+File *.xlsx tidak dapat diproses.
+"""
+        )
+        st.stop()
+
+    if not nama_file.endswith(".xls"):
+        st.error(
+            """
+❌ Format file tidak dikenali!
+
+Silakan upload file dengan format *.xls
+"""
+        )
+        st.stop()
+
+    # ======================
+    # VALIDASI NAMA FILE
+    # ======================
+    pola = {
+        "Faktur": r"^faktur(\s+\d+)?\.xls$",
+        "Mutasi": r"^mutasi(\s+\d+)?\.xls$",
+        "Order": r"^order(\s+\d+)?\.xls$",
+        "Redo": r"^redo(\s+\d+)?\.xls$",
+        "Cabut Pending": r"^cabut pending(\s+\d+)?\.xls$",
+        "Order Dentcore": r"^order dentcore(\s+\d+)?\.xls$",
+        "Redo Dentcore": r"^redo dentcore(\s+\d+)?\.xls$",
+        "Jadwal Klinik": r"^jadwal klinik(\s+\d+)?\.xls$",
+        "Point Klinik": r"^point klinik(\s+\d+)?\.xls$",
+    }
+
+    if menu in pola:
+
+        if not re.match(pola[menu], nama_file):
+
+            st.error(
+                f"""
+🚫 File yang dipilih tidak sesuai!
+
+Menu yang dipilih :
+➡️ {menu}
+
+File yang diupload :
+➡️ {uploaded_file.name}
+
+Silakan upload file yang sesuai.
+"""
+            )
+            st.stop()
 
 # ======================
 # PROCESSING
 # ======================
 if uploaded_file:
 
+    # ======================
+    # VALIDASI FILE UTAMA
+    # ======================
+    validasi_file(uploaded_file, menu)
+
+    # ======================
+    # VALIDASI MASTER
+    # ======================
+    if master_file:
+
+        if master_file.name.lower().endswith(".xlsx"):
+            st.error(
+                """
+❌ File Master harus menggunakan format *.xls
+
+File *.xlsx tidak didukung.
+"""
+            )
+            st.stop()
+
+        if not master_file.name.lower().endswith(".xls"):
+            st.error("❌ File Master harus berformat .xls")
+            st.stop()
+
+    # ======================
+    # BACA FILE
+    # ======================
     df = pd.read_excel(uploaded_file)
 
-    # load master kalau ada
     df_master = None
     if master_file:
         df_master = pd.read_excel(master_file)
@@ -111,7 +202,7 @@ if uploaded_file:
                     df = proses_order(df)
 
                 elif menu == "Redo":
-                    df = proses_redo(df, df_master)  # <-- penting
+                    df = proses_redo(df, df_master)
 
                 elif menu == "Cabut Pending":
                     df = proses_cabut_pending(df, df_master)
@@ -131,11 +222,11 @@ if uploaded_file:
                 elif menu == "Point Klinik":
                     df = proses_point_klinik(df)
 
-        st.success("Selesai!")
+        st.success("✅ Selesai!")
         st.dataframe(df)
 
         st.download_button(
-            "Download Excel",
+            "📥 Download Excel",
             to_excel(df),
             file_name=f"hasil_{kategori}_{menu}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
