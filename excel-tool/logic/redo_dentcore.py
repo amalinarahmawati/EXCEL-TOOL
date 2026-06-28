@@ -29,22 +29,32 @@ def safe_text(x):
 # =========================
 def fix_excel_datetime(series):
 
+    # kalau sudah datetime
     if pd.api.types.is_datetime64_any_dtype(series):
         return series
 
-    s = pd.to_numeric(series, errors="coerce")
+    result = pd.Series(pd.NaT, index=series.index)
 
-    mask_small = (s > 0) & (s < 1000)
-    s.loc[mask_small] = s.loc[mask_small] * 100000
+    # coba numeric (Excel serial)
+    num = pd.to_numeric(series, errors="coerce")
 
-    s = s.where((s > 20000) & (s < 80000))
+    mask_excel = (num > 20000) & (num < 80000)
 
-    return pd.to_datetime(
-        s,
+    result.loc[mask_excel] = pd.to_datetime(
+        num.loc[mask_excel],
         unit="D",
         origin="1899-12-30",
         errors="coerce"
     )
+
+    # sisanya coba parse sebagai string tanggal
+    result.loc[~mask_excel] = pd.to_datetime(
+        series.loc[~mask_excel],
+        errors="coerce",
+        dayfirst=True
+    )
+
+    return result
 
 
 # =========================
