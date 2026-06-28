@@ -56,7 +56,7 @@ elif kategori == "KLINIK":
     )
 
 
-uploaded_file = st.file_uploader("Upload Excel", type=["xlsx", "xls"])
+uploaded_file = st.file_uploader("Upload Excel", type=["xls"])
 
 # ======================
 # MASTER FILE (UNTUK REDO SAJA)
