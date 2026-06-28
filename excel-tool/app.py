@@ -155,25 +155,6 @@ if uploaded_file:
     validasi_file(uploaded_file, menu)
 
     # ======================
-    # VALIDASI MASTER
-    # ======================
-    if master_file:
-
-        if master_file.name.lower().endswith(".xlsx"):
-            st.error(
-                """
-❌ File Master harus menggunakan format *.xls
-
-File *.xlsx tidak didukung.
-"""
-            )
-            st.stop()
-
-        if not master_file.name.lower().endswith(".xls"):
-            st.error("❌ File Master harus berformat .xls")
-            st.stop()
-
-    # ======================
     # BACA FILE
     # ======================
     df = pd.read_excel(uploaded_file)
